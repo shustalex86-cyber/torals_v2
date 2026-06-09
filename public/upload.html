@@ -108,6 +108,23 @@ input[type="file"]{display:none}
     <input type="file" id="fileInput" accept="image/*,video/*" multiple>
   </div>
 
+  <!-- YANDEX DISK IMPORT -->
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:24px">
+    <div style="font-family:'Outfit',sans-serif;font-weight:600;color:#fff;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:1.2em">☁️</span> Импорт с Яндекс.Диска
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <input type="text" id="yadiskUrl" placeholder="Вставьте публичную ссылку на папку Яндекс.Диска" style="flex:1;min-width:200px;padding:12px 16px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-size:.9em;font-family:'DM Sans',sans-serif">
+      <button class="btn btn-accent" onclick="loadYaDisk()">📂 Загрузить список</button>
+    </div>
+    <div style="color:var(--t3);font-size:.78em;margin-top:8px">Сделайте папку публичной в Яндекс.Диске → скопируйте ссылку → вставьте сюда</div>
+    <div id="yadiskPreview" style="margin-top:16px"></div>
+    <div id="yadiskProgress" style="display:none;margin-top:12px">
+      <div class="progress-track"><div class="progress-fill" id="yadiskFill"></div></div>
+      <div class="progress-text" id="yadiskText">Импорт...</div>
+    </div>
+  </div>
+
   <div class="preview-bar" id="previewBar" style="display:none">
     <span style="color:var(--t2);font-size:.88em" id="previewCount">0 файлов</span>
     <div style="display:flex;gap:8px">
@@ -247,6 +264,55 @@ async function delPhoto(id,fname){
 }
 
 function viewImg(src){$('imgViewerImg').src=src;$('imgViewer').classList.add('active')}
+
+// ===== YANDEX DISK =====
+var yadiskFiles=[];
+
+async function loadYaDisk(){
+  var url=$('yadiskUrl').value.trim();
+  if(!url){toast('⚠️ Вставьте ссылку');return}
+  if(!CUR_PID){toast('⚠️ Сначала выберите объект!');return}
+  $('yadiskPreview').innerHTML='<div style="color:var(--t2);padding:20px;text-align:center">⏳ Загрузка списка...</div>';
+  try{
+    var r=await fetch('/api/yadisk?url='+encodeURIComponent(url));
+    var data=await r.json();
+    if(data.error){$('yadiskPreview').innerHTML='<div style="color:var(--red)">❌ '+data.error+'</div>';return}
+    yadiskFiles=data.files||[];
+    if(!yadiskFiles.length){$('yadiskPreview').innerHTML='<div style="color:var(--t3);text-align:center;padding:20px">Фото не найдены в этой папке</div>';return}
+    var h='<div style="color:var(--green);margin-bottom:12px;font-weight:600">✅ Найдено: '+yadiskFiles.length+' файлов'+(data.name?' в папке «'+data.name+'»':'')+'</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:12px">';
+    for(var f of yadiskFiles.slice(0,20)){
+      h+='<div style="background:var(--bg2);border-radius:8px;padding:8px;text-align:center;border:1px solid var(--border2)"><div style="font-size:1.5em;margin-bottom:4px">'+(f.mime.startsWith('video/')?'🎬':'📸')+'</div><div style="font-size:.68em;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+f.name+'</div></div>';
+    }
+    if(yadiskFiles.length>20)h+='<div style="display:flex;align-items:center;justify-content:center;color:var(--t3);font-size:.82em">+ещё '+(yadiskFiles.length-20)+'</div>';
+    h+='</div>';
+    h+='<button class="btn btn-accent" onclick="importYaDisk()" style="width:100%">📥 Импортировать все '+yadiskFiles.length+' файлов</button>';
+    $('yadiskPreview').innerHTML=h;
+  }catch(e){
+    $('yadiskPreview').innerHTML='<div style="color:var(--red)">❌ Ошибка: '+e.message+'</div>';
+  }
+}
+
+async function importYaDisk(){
+  if(!yadiskFiles.length||!CUR_PID)return;
+  var pw=$('yadiskProgress'),pf=$('yadiskFill'),pt=$('yadiskText');
+  pw.style.display='block';
+  var total=yadiskFiles.length,done=0,errors=0;
+  for(var f of yadiskFiles){
+    pt.textContent='Импорт '+(done+1)+' из '+total+': '+f.name;
+    pf.style.width=Math.round(done/total*100)+'%';
+    try{
+      var r=await fetch('/api/yadisk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileUrl:f.url,fileName:f.name,projectId:CUR_PID,uploadedBy:USER.display_name,mime:f.mime})});
+      var d=await r.json();
+      if(d.ok)done++;else{errors++;done++}
+    }catch(e){errors++;done++}
+    pf.style.width=Math.round(done/total*100)+'%';
+  }
+  pt.textContent='✅ Импортировано: '+(done-errors)+' из '+total+(errors?' (ошибок: '+errors+')':'');
+  setTimeout(()=>{pw.style.display='none';pf.style.width='0%'},4000);
+  yadiskFiles=[];$('yadiskPreview').innerHTML='';loadGallery();
+  toast('☁️ Импортировано: '+(done-errors)+' файлов');
+}
 </script>
 </body>
 </html>
