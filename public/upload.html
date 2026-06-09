@@ -46,13 +46,18 @@ input[type="file"]{display:none}
 .progress-text{font-size:.82em;color:var(--t2);margin-top:6px;text-align:center}
 .gallery-title{font-family:'Outfit',sans-serif;font-size:1.1em;font-weight:600;color:#fff;margin-bottom:16px;display:flex;align-items:center;gap:10px}
 .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:40px}
-.gallery-item{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--bg2);transition:all .3s}
+.gallery-item{position:relative;border-radius:12px;overflow:hidden;border:2px solid var(--border);background:var(--bg2);transition:all .3s}
 .gallery-item:hover{border-color:var(--accent-b)}
+.gallery-item.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-dim)}
 .gallery-item img{width:100%;height:160px;object-fit:cover;display:block;cursor:pointer}
+.gallery-item-check{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:6px;background:rgba(0,0,0,.5);border:2px solid rgba(255,255,255,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.7em;color:#fff;z-index:2;transition:all .2s}
+.gallery-item.selected .gallery-item-check{background:var(--accent);border-color:var(--accent)}
 .gallery-item-info{padding:8px 10px;display:flex;justify-content:space-between;align-items:center}
 .gallery-item-name{font-size:.72em;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px}
 .gallery-item-del{background:none;border:none;color:var(--t3);cursor:pointer;font-size:.85em;padding:4px}
 .gallery-item-del:hover{color:var(--red)}
+.select-bar{display:none;background:var(--card);border:1px solid var(--accent-b);border-radius:12px;padding:12px 16px;margin-bottom:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.select-bar.active{display:flex}
 .empty{text-align:center;padding:60px 20px;color:var(--t3)}
 .empty-icon{font-size:3em;margin-bottom:12px;opacity:.3}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:12px 28px;background:var(--accent);color:#fff;border-radius:10px;z-index:8000;font-size:.9em;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,.3);animation:toastIn .3s;pointer-events:none}
@@ -237,23 +242,96 @@ async function uploadAll(){
   toast('📸 Загружено: '+(done-errors)+' файлов');
 }
 
+var selectedPhotos=new Set();
+
 async function loadGallery(){
   if(!CUR_PID){$('galleryArea').innerHTML='';return}
   const{data:photos}=await sb.from('project_photos').select('*').eq('project_id',CUR_PID).order('created_at',{ascending:false});
   $('projStats').textContent=(photos?photos.length:0)+' фото';
+  selectedPhotos.clear();
   if(!photos||!photos.length){$('galleryArea').innerHTML='<div class="empty"><div class="empty-icon">📷</div>Фото пока нет. Перетащите файлы в зону выше.</div>';return}
   var h='<div class="gallery-title">📸 Загруженные фото <span style="color:var(--t3);font-weight:400;font-size:.8em">('+photos.length+')</span></div>';
-  h+='<div class="gallery-grid">';
+  h+='<div class="select-bar" id="selectBar"><div style="display:flex;align-items:center;gap:12px"><button class="btn btn-gray btn-sm" onclick="selectAll()">☑ Выделить все</button><button class="btn btn-gray btn-sm" onclick="deselectAll()">Снять выделение</button><span style="color:var(--accent-l);font-size:.85em" id="selectedCount">0 выбрано</span></div><button class="btn btn-red btn-sm" onclick="deleteSelected()">🗑 Удалить выбранные</button></div>';
+  h+='<div style="margin-bottom:8px"><button class="btn btn-gray btn-sm" onclick="toggleSelectMode()" id="btnSelectMode">☑ Режим выделения</button></div>';
+  h+='<div class="gallery-grid" id="galleryGrid">';
   for(var p of photos){
     var url=SUPA_URL+'/storage/v1/object/public/photo/'+p.filename;
     var ext=p.filename.split('.').pop().toLowerCase();
     var isVid=['mp4','mov','avi','webm','mkv'].includes(ext);
-    h+='<div class="gallery-item">';
-    h+=isVid?'<video src="'+url+'" style="width:100%;height:160px;object-fit:cover" muted></video>':'<img src="'+url+'" onclick="viewImg(\''+url+'\')" loading="lazy">';
-    h+='<div class="gallery-item-info"><span class="gallery-item-name" title="'+p.uploaded_by+'">'+p.uploaded_by+'</span><button class="gallery-item-del" onclick="delPhoto('+p.id+',\''+p.filename+'\')" title="Удалить">🗑</button></div></div>';
+    h+='<div class="gallery-item" data-id="'+p.id+'" data-fname="'+p.filename+'" onclick="toggleSelect(this)">';
+    h+='<div class="gallery-item-check" id="chk'+p.id+'"></div>';
+    h+=isVid?'<video src="'+url+'" style="width:100%;height:160px;object-fit:cover" muted></video>':'<img src="'+url+'" loading="lazy">';
+    h+='<div class="gallery-item-info"><span class="gallery-item-name" title="'+p.uploaded_by+'">'+p.uploaded_by+'</span><button class="gallery-item-del" onclick="event.stopPropagation();delPhoto('+p.id+',\''+p.filename+'\')" title="Удалить">🗑</button></div></div>';
   }
   h+='</div>';
   $('galleryArea').innerHTML=h;
+}
+
+var selectMode=false;
+function toggleSelectMode(){
+  selectMode=!selectMode;
+  $('btnSelectMode').textContent=selectMode?'✅ Выйти из выделения':'☑ Режим выделения';
+  $('btnSelectMode').style.background=selectMode?'var(--accent)':'';
+  $('selectBar').classList.toggle('active',selectMode);
+  if(!selectMode)deselectAll();
+}
+
+function toggleSelect(el){
+  if(!selectMode){
+    var img=el.querySelector('img');
+    if(img)viewImg(img.src);
+    return;
+  }
+  var id=el.dataset.id,fname=el.dataset.fname;
+  if(selectedPhotos.has(id)){
+    selectedPhotos.delete(id);
+    el.classList.remove('selected');
+    el.querySelector('.gallery-item-check').textContent='';
+  }else{
+    selectedPhotos.add(id);
+    el.classList.add('selected');
+    el.querySelector('.gallery-item-check').textContent='✓';
+  }
+  updateSelectedCount();
+}
+
+function selectAll(){
+  document.querySelectorAll('.gallery-item').forEach(el=>{
+    selectedPhotos.add(el.dataset.id);
+    el.classList.add('selected');
+    el.querySelector('.gallery-item-check').textContent='✓';
+  });
+  updateSelectedCount();
+}
+
+function deselectAll(){
+  selectedPhotos.clear();
+  document.querySelectorAll('.gallery-item').forEach(el=>{
+    el.classList.remove('selected');
+    el.querySelector('.gallery-item-check').textContent='';
+  });
+  updateSelectedCount();
+}
+
+function updateSelectedCount(){
+  var el=$('selectedCount');
+  if(el)el.textContent=selectedPhotos.size+' выбрано';
+}
+
+async function deleteSelected(){
+  if(!selectedPhotos.size)return;
+  if(!confirm('Удалить '+selectedPhotos.size+' фото?'))return;
+  var items=document.querySelectorAll('.gallery-item.selected');
+  var total=items.length,done=0;
+  for(var el of items){
+    var id=parseInt(el.dataset.id),fname=el.dataset.fname;
+    await sb.storage.from('photo').remove([fname]);
+    await sb.from('project_photos').delete().eq('id',id);
+    done++;
+  }
+  selectedPhotos.clear();
+  loadGallery();
+  toast('🗑 Удалено: '+done+' фото');
 }
 
 async function delPhoto(id,fname){
