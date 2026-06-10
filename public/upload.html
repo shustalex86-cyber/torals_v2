@@ -219,27 +219,67 @@ function renderPreview(){
 function removePending(i){pending.splice(i,1);if(!pending.length)clearPending();else renderPreview()}
 function clearPending(){pending=[];$('previewBar').style.display='none';$('previewGrid').innerHTML=''}
 
+// === IMAGE COMPRESSION ===
+function compressImage(file,maxSize,quality){
+  return new Promise((resolve)=>{
+    if(file.type.startsWith('video/')){resolve(file);return}
+    if(!file.type.startsWith('image/')){resolve(file);return}
+    var img=new Image();
+    img.onload=function(){
+      var w=img.width,h=img.height;
+      // Resize if larger than maxSize
+      if(w>maxSize||h>maxSize){
+        if(w>h){h=Math.round(h*maxSize/w);w=maxSize}
+        else{w=Math.round(w*maxSize/h);h=maxSize}
+      }
+      var canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      var ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      canvas.toBlob(function(blob){
+        if(blob){
+          var compressed=new File([blob],file.name.replace(/\.\w+$/,'.jpg'),{type:'image/jpeg'});
+          resolve(compressed);
+        }else{resolve(file)}
+      },'image/jpeg',quality);
+    };
+    img.onerror=function(){resolve(file)};
+    img.src=URL.createObjectURL(file);
+  });
+}
+
+function formatSize(bytes){
+  if(bytes<1024)return bytes+' Б';
+  if(bytes<1024*1024)return (bytes/1024).toFixed(1)+' КБ';
+  return (bytes/1024/1024).toFixed(1)+' МБ';
+}
+
 async function uploadAll(){
   if(!pending.length||!CUR_PID)return;
   var pw=$('progressWrap'),pf=$('progressFill'),pt=$('progressText');
   pw.style.display='block';
-  var total=pending.length,done=0,errors=0;
+  var total=pending.length,done=0,errors=0,savedBytes=0;
   for(var f of pending){
-    pt.textContent='Загрузка '+(done+1)+' из '+total+'...';
+    pt.textContent='Сжатие и загрузка '+(done+1)+' из '+total+'...';
     pf.style.width=Math.round(done/total*100)+'%';
-    var ext=f.name.split('.').pop()||'jpg';
+    // Compress image (1920px max, 82% quality)
+    var originalSize=f.size;
+    var compressed=await compressImage(f,1920,0.82);
+    savedBytes+=originalSize-compressed.size;
+    var ext=compressed.name.split('.').pop()||'jpg';
     var fname=Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.'+ext;
-    const{error}=await sb.storage.from('photo').upload(fname,f,{contentType:f.type});
+    const{error}=await sb.storage.from('photo').upload(fname,compressed,{contentType:compressed.type});
     if(!error){
       await sb.from('project_photos').insert({project_id:CUR_PID,filename:fname,original_name:f.name,uploaded_by:USER.display_name});
       done++;
     }else{errors++;done++}
     pf.style.width=Math.round(done/total*100)+'%';
   }
-  pt.textContent='✅ Загружено: '+(done-errors)+' из '+total+(errors?' (ошибок: '+errors+')':'');
-  setTimeout(()=>{pw.style.display='none';pf.style.width='0%'},3000);
+  var savedMsg=savedBytes>0?' · Сэкономлено: '+formatSize(savedBytes):'';
+  pt.textContent='✅ Загружено: '+(done-errors)+' из '+total+savedMsg;
+  setTimeout(()=>{pw.style.display='none';pf.style.width='0%'},4000);
   clearPending();loadGallery();
-  toast('📸 Загружено: '+(done-errors)+' файлов');
+  toast('📸 Загружено: '+(done-errors)+' файлов'+savedMsg);
 }
 
 var selectedPhotos=new Set();
