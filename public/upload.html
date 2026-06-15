@@ -101,7 +101,9 @@ input[type="file"]{display:none}
     <select class="proj-select" id="projSelect" onchange="selectProject(this.value)">
       <option value="">— Выберите объект —</option>
     </select>
-    <button class="btn btn-green btn-sm" onclick="newProject()">＋ Новый объект</button>
+    <button class="btn btn-green btn-sm" onclick="newProject()">＋ Новый</button>
+    <button class="btn btn-gray btn-sm" id="btnEditProj" onclick="editProject()" style="display:none">✏️ Изменить</button>
+    <button class="btn btn-red btn-sm" id="btnDelProj" onclick="deleteProject()" style="display:none">🗑 Удалить</button>
     <div style="flex:1"></div>
     <span id="projStats" style="color:var(--t3);font-size:.82em"></span>
   </div>
@@ -154,6 +156,71 @@ input[type="file"]{display:none}
   <img id="imgViewerImg" src="">
 </div>
 
+<!-- EDIT PROJECT MODAL -->
+<div class="modal-overlay" id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:9999;justify-content:center;align-items:center;padding:16px">
+  <div style="background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:28px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto">
+    <h3 style="font-family:'Outfit',sans-serif;color:#fff;margin-bottom:18px;font-size:1.2em">✏️ Редактирование объекта</h3>
+    <div style="display:grid;gap:12px">
+      <div>
+        <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Название *</label>
+        <input type="text" id="em_name" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Заказчик</label>
+          <input type="text" id="em_client" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
+        </div>
+        <div>
+          <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Площадь</label>
+          <input type="text" id="em_area" placeholder="350 м²" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Адрес / город</label>
+        <input type="text" id="em_address" placeholder="Краснодар, ЖК «...»" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Статус</label>
+          <select id="em_status" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
+            <option value="active">🔧 В работе (текущий)</option>
+            <option value="completed">✅ Завершён (портфолио)</option>
+            <option value="hidden">🙈 Скрыт</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Категория</label>
+          <select id="em_category" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
+            <option value="electro">⚡ Электромонтаж</option>
+            <option value="hvac">💨 Вентиляция</option>
+            <option value="ac">❄️ Кондиционирование</option>
+            <option value="smart">🏠 Умный дом</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Дата завершения</label>
+        <input type="month" id="em_completion" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
+      </div>
+      <div>
+        <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Описание (для портфолио)</label>
+        <textarea id="em_description" rows="3" placeholder="Краткое описание объекта..." style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif;resize:vertical"></textarea>
+      </div>
+      <div>
+        <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Обложка (главное фото)</label>
+        <select id="em_cover" onchange="changeCoverPreview()" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
+          <option value="">— Не выбрана —</option>
+        </select>
+        <div id="coverPreview"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-gray" style="flex:1" onclick="closeEditModal()">Отмена</button>
+      <button class="btn btn-accent" style="flex:2" onclick="saveProjectEdit()">💾 Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const SUPA_URL='https://itwvitoiijbnkktvudwl.supabase.co';
 const SUPA_KEY='sb_publishable_4x2m0SbchUSP1OZZRlmNGA_Xexn_a_c';
@@ -185,14 +252,122 @@ async function showApp(){
 }
 
 async function selectProject(id){
-  if(!id){CUR_PID=null;$('galleryArea').innerHTML='';$('projStats').textContent='';return}
-  CUR_PID=parseInt(id);loadGallery();
+  if(!id){
+    CUR_PID=null;
+    $('galleryArea').innerHTML='';
+    $('projStats').textContent='';
+    $('btnEditProj').style.display='none';
+    $('btnDelProj').style.display='none';
+    return;
+  }
+  CUR_PID=parseInt(id);
+  $('btnEditProj').style.display='inline-flex';
+  $('btnDelProj').style.display='inline-flex';
+  loadGallery();
+}
+
+async function refreshProjectList(selectId){
+  const{data}=await sb.from('projects').select('*').order('created_at',{ascending:false});
+  PROJECTS=data||[];
+  var sel=$('projSelect');
+  sel.innerHTML='<option value="">— Выберите объект —</option>'+PROJECTS.map(p=>'<option value="'+p.id+'">'+p.name+'</option>').join('');
+  if(selectId)sel.value=selectId;
 }
 
 async function newProject(){
-  var name=prompt('Название нового объекта:');if(!name)return;
-  const{data}=await sb.from('projects').insert({name,status:'active'}).select().single();
-  if(data){PROJECTS.unshift(data);var sel=$('projSelect');sel.innerHTML='<option value="">— Выберите объект —</option>'+PROJECTS.map(p=>'<option value="'+p.id+'">'+p.name+'</option>').join('');sel.value=data.id;CUR_PID=data.id;loadGallery();toast('📁 '+name+' создан')}
+  var name=prompt('Название нового объекта:');
+  if(!name||!name.trim())return;
+  const{data}=await sb.from('projects').insert({name:name.trim(),status:'active'}).select().single();
+  if(data){
+    await refreshProjectList(data.id);
+    CUR_PID=data.id;
+    $('btnEditProj').style.display='inline-flex';
+    $('btnDelProj').style.display='inline-flex';
+    loadGallery();
+    toast('📁 «'+name.trim()+'» создан');
+  }
+}
+
+async function editProject(){
+  if(!CUR_PID)return;
+  var cur=PROJECTS.find(p=>p.id===CUR_PID);
+  if(!cur)return;
+  $('em_name').value=cur.name||'';
+  $('em_client').value=cur.client||'';
+  $('em_address').value=cur.address||'';
+  $('em_category').value=cur.category||'electro';
+  $('em_status').value=cur.status||'active';
+  $('em_description').value=cur.description||'';
+  $('em_completion').value=cur.completion_date||'';
+  $('em_area').value=cur.area||'';
+  // Load cover options from project photos
+  const{data:photos}=await sb.from('project_photos').select('filename').eq('project_id',CUR_PID).order('created_at',{ascending:false});
+  var coverSel=$('em_cover');
+  coverSel.innerHTML='<option value="">— Не выбрана —</option>';
+  if(photos&&photos.length){
+    for(var p of photos){
+      var sel=p.filename===cur.cover_filename?' selected':'';
+      coverSel.innerHTML+='<option value="'+p.filename+'"'+sel+'>'+p.filename.substring(0,30)+'...</option>';
+    }
+  }
+  $('coverPreview').innerHTML=cur.cover_filename?'<img src="'+SUPA_URL+'/storage/v1/object/public/photo/'+cur.cover_filename+'" style="max-width:200px;border-radius:8px;margin-top:8px">':'<div style="color:var(--t3);font-size:.82em;margin-top:8px">Загрузите фото в объект, чтобы выбрать обложку</div>';
+  $('editModal').style.display='flex';
+}
+
+function closeEditModal(){$('editModal').style.display='none'}
+
+function changeCoverPreview(){
+  var fname=$('em_cover').value;
+  $('coverPreview').innerHTML=fname?'<img src="'+SUPA_URL+'/storage/v1/object/public/photo/'+fname+'" style="max-width:200px;border-radius:8px;margin-top:8px">':'';
+}
+
+async function saveProjectEdit(){
+  if(!CUR_PID)return;
+  var body={
+    name:$('em_name').value.trim(),
+    client:$('em_client').value.trim(),
+    address:$('em_address').value.trim(),
+    category:$('em_category').value,
+    status:$('em_status').value,
+    description:$('em_description').value.trim(),
+    completion_date:$('em_completion').value,
+    area:$('em_area').value.trim(),
+    cover_filename:$('em_cover').value||null
+  };
+  if(!body.name){alert('Введите название');return}
+  const{error}=await sb.from('projects').update(body).eq('id',CUR_PID);
+  if(error){toast('❌ Ошибка: '+error.message);return}
+  $('editModal').style.display='none';
+  await refreshProjectList(CUR_PID);
+  toast('✏️ Сохранено');
+}
+
+async function deleteProject(){
+  if(!CUR_PID)return;
+  var cur=PROJECTS.find(p=>p.id===CUR_PID);
+  if(!cur)return;
+  // Count photos
+  const{count}=await sb.from('project_photos').select('*',{count:'exact',head:true}).eq('project_id',CUR_PID);
+  var msg='Удалить объект «'+cur.name+'»?';
+  if(count>0)msg+='\n\n⚠️ Будет удалено '+count+' фото!';
+  msg+='\n\nЭто действие нельзя отменить.';
+  if(!confirm(msg))return;
+  if(!confirm('Точно удалить? Последний шанс отменить.'))return;
+  // Delete photos from storage
+  const{data:photos}=await sb.from('project_photos').select('filename').eq('project_id',CUR_PID);
+  if(photos&&photos.length){
+    var fnames=photos.map(p=>p.filename);
+    await sb.storage.from('photo').remove(fnames);
+  }
+  // Delete project (cascade will remove photos, works, receipts)
+  await sb.from('projects').delete().eq('id',CUR_PID);
+  CUR_PID=null;
+  await refreshProjectList();
+  $('galleryArea').innerHTML='';
+  $('projStats').textContent='';
+  $('btnEditProj').style.display='none';
+  $('btnDelProj').style.display='none';
+  toast('🗑 Объект удалён');
 }
 
 // Drag & drop
