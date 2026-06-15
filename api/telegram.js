@@ -15,41 +15,51 @@ module.exports=async(req,res)=>{
   }
 
   const menu=[
-    ['📁 Выбрать объект','📋 Текущий объект'],
-    ['📸 Отправить фото','🎬 Отправить видео'],
+    ['📁 Выбрать объект','➕ Новый объект'],
+    ['📋 Текущий объект','💬 Комментарий'],
     ['🔔 Уведомления','❓ Помощь']
   ];
 
   async function getState(chatId){
-    const{data}=await sb.from('bot_state').select('project_id').eq('chat_id',String(chatId)).single();
-    return data?data.project_id:null;
+    const{data}=await sb.from('bot_state').select('*').eq('chat_id',String(chatId)).single();
+    return data||{project_id:null,awaiting:null,comment:null};
   }
-
-  async function setState(chatId,pid){
-    await sb.from('bot_state').upsert({chat_id:String(chatId),project_id:pid,updated_at:new Date().toISOString()});
+  async function setState(chatId,fields){
+    await sb.from('bot_state').upsert({chat_id:String(chatId),updated_at:new Date().toISOString(),...fields});
   }
-
   async function getProjName(pid){
     const{data}=await sb.from('projects').select('name').eq('id',pid).single();
     return data?data.name:'?';
   }
 
+  async function saveMedia(fileId,ext,mime,pid,caption,uploader){
+    const fr=await fetch('https://api.telegram.org/bot'+BT+'/getFile?file_id='+fileId);
+    const fd=await fr.json();
+    if(!fd.ok)return false;
+    const fu='https://api.telegram.org/file/bot'+BT+'/'+fd.result.file_path;
+    const ir=await fetch(fu);
+    const ib=Buffer.from(await ir.arrayBuffer());
+    const fn=Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.'+ext;
+    await sb.storage.from('photo').upload(fn,ib,{contentType:mime});
+    await sb.from('project_photos').insert({project_id:pid,filename:fn,original_name:caption||('file.'+ext),uploaded_by:uploader});
+    return true;
+  }
+
   try{
     const u=req.body;
 
-    // === CALLBACK QUERY (выбор объекта) ===
     if(u.callback_query){
       const q=u.callback_query,ci=q.message.chat.id;
       if(q.data.startsWith('proj_')){
         const pid=parseInt(q.data.replace('proj_',''));
         const name=await getProjName(pid);
-        await setState(ci,pid);
+        await setState(ci,{project_id:pid,awaiting:null});
         await fetch('https://api.telegram.org/bot'+BT+'/answerCallbackQuery',{
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({callback_query_id:q.id,text:'✅ '+name})
         });
         const{count}=await sb.from('project_photos').select('*',{count:'exact',head:true}).eq('project_id',pid);
-        await sm(ci,'✅ *Объект выбран:*\n\n📁 *'+name+'*\n📸 Загружено фото: '+(count||0)+'\n\nТеперь просто отправляйте или пересылайте фото — они попадут в этот объект.',{reply_markup:{keyboard:menu,resize_keyboard:true}});
+        await sm(ci,'✅ *Объект выбран:*\n\n📁 *'+name+'*\n📸 Загружено фото: '+(count||0)+'\n\nТеперь отправляйте фото и видео — они попадут в этот объект.',{reply_markup:{keyboard:menu,resize_keyboard:true}});
       }
       return res.status(200).json({ok:1});
     }
@@ -60,157 +70,153 @@ module.exports=async(req,res)=>{
     const ci=m.chat.id;
     const tx=m.text||'';
     const nm=m.from.first_name||'Коллега';
+    const st=await getState(ci);
 
-    // === КОМАНДЫ ===
+    if(st.awaiting==='new_project_name'&&tx&&!tx.startsWith('/')){
+      const{data,error}=await sb.from('projects').insert({name:tx.trim(),status:'active'}).select().single();
+      if(error||!data){
+        await sm(ci,'❌ Ошибка создания. Попробуйте ещё раз.');
+        await setState(ci,{awaiting:null});
+        return res.status(200).json({ok:1});
+      }
+      await setState(ci,{project_id:data.id,awaiting:null});
+      await sm(ci,'✅ *Объект создан и выбран!*\n\n📁 *'+tx.trim()+'*\n\nТеперь отправляйте фото — они попадут сюда.\nИзменить детали (категория, статус, обложка) можно на сайте: torals.pro/upload.html',{reply_markup:{keyboard:menu,resize_keyboard:true}});
+      return res.status(200).json({ok:1});
+    }
+
+    if(st.awaiting==='comment'&&tx&&!tx.startsWith('/')){
+      await setState(ci,{comment:tx.trim(),awaiting:null});
+      const pn=st.project_id?await getProjName(st.project_id):'—';
+      await sm(ci,'💬 *Комментарий сохранён:*\n_'+tx.trim()+'_\n\nОн добавится к следующим фото для объекта *'+pn+'*.\nОтправляйте фото!',{reply_markup:{keyboard:menu,resize_keyboard:true}});
+      return res.status(200).json({ok:1});
+    }
 
     if(tx==='/start'||tx==='❓ Помощь'){
+      await setState(ci,{awaiting:null});
       await sm(ci,
         '👋 Привет, *'+nm+'*!\n\n'+
         'Я бот компании *ТОРАЛС*.\n'+
         'Загружаю фото и видео с объектов на сайт.\n\n'+
         '*Как пользоваться:*\n'+
-        '1️⃣ Нажмите «📁 Выбрать объект»\n'+
-        '2️⃣ Выберите объект из списка\n'+
-        '3️⃣ Отправляйте или пересылайте фото\n'+
-        '4️⃣ Они автоматически появятся на сайте\n\n'+
-        '💡 _Можно пересылать сразу много фото из чатов — бот обработает все!_',
+        '📁 «Выбрать объект» — выбрать из списка\n'+
+        '➕ «Новый объект» — создать прямо здесь\n'+
+        '📋 «Текущий объект» — куда грузятся фото\n'+
+        '💬 «Комментарий» — подпись к фото\n\n'+
+        'После выбора объекта — просто отправляйте или пересылайте фото. Можно сразу много!',
         {reply_markup:{keyboard:menu,resize_keyboard:true}}
       );
       return res.status(200).json({ok:1});
     }
 
+    if(tx==='➕ Новый объект'||tx==='/newproject'){
+      await setState(ci,{awaiting:'new_project_name'});
+      await sm(ci,'➕ *Создание нового объекта*\n\nНапишите название объекта одним сообщением.\n\n_Например: «Квартира ЖК Самолёт» или «Офис на Красной»_\n\nДля отмены нажмите ❓ Помощь');
+      return res.status(200).json({ok:1});
+    }
+
+    if(tx==='💬 Комментарий'||tx==='/comment'){
+      if(!st.project_id){
+        await sm(ci,'⚠️ Сначала выберите объект!');
+        return res.status(200).json({ok:1});
+      }
+      await setState(ci,{awaiting:'comment'});
+      await sm(ci,'💬 *Добавить комментарий*\n\nНапишите подпись, которая добавится к следующим фото.\n\n_Например: «Монтаж щита, 2 этаж»_');
+      return res.status(200).json({ok:1});
+    }
+
     if(tx==='📁 Выбрать объект'||tx==='/projects'){
+      await setState(ci,{awaiting:null});
       const{data:pr}=await sb.from('projects').select('id,name,address').eq('status','active').order('created_at',{ascending:false});
       if(!pr||!pr.length){
-        await sm(ci,'📁 Активных объектов нет.\nСоздайте объект на сайте или через команду /newproject');
+        await sm(ci,'📁 Активных объектов нет.\nСоздайте новый кнопкой «➕ Новый объект»');
         return res.status(200).json({ok:1});
       }
       const kb=pr.map(p=>[{text:'📁 '+p.name+(p.address?' · '+p.address:''),callback_data:'proj_'+p.id}]);
       await fetch('https://api.telegram.org/bot'+BT+'/sendMessage',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({chat_id:ci,text:'📁 *Выберите объект:*\n\n_Фото будут загружаться в выбранный объект_',parse_mode:'Markdown',reply_markup:{inline_keyboard:kb}})
+        body:JSON.stringify({chat_id:ci,text:'📁 *Выберите объект:*',parse_mode:'Markdown',reply_markup:{inline_keyboard:kb}})
       });
       return res.status(200).json({ok:1});
     }
 
     if(tx==='📋 Текущий объект'||tx==='/current'){
-      const pid=await getState(ci);
-      if(!pid){
-        await sm(ci,'⚠️ Объект не выбран.\n\nНажмите «📁 Выбрать объект» чтобы выбрать.');
+      if(!st.project_id){
+        await sm(ci,'⚠️ Объект не выбран.\nНажмите «📁 Выбрать объект» или «➕ Новый объект».');
         return res.status(200).json({ok:1});
       }
-      const name=await getProjName(pid);
-      const{count}=await sb.from('project_photos').select('*',{count:'exact',head:true}).eq('project_id',pid);
-      await sm(ci,'📋 *Текущий объект:*\n\n📁 *'+name+'*\n📸 Фото: '+(count||0)+'\n\n_Отправляйте фото — они попадут сюда_');
-      return res.status(200).json({ok:1});
-    }
-
-    if(tx==='📸 Отправить фото'||tx==='🎬 Отправить видео'){
-      const pid=await getState(ci);
-      if(!pid){
-        await sm(ci,'⚠️ Сначала выберите объект!\n\nНажмите «📁 Выбрать объект»');
-        return res.status(200).json({ok:1});
-      }
-      const name=await getProjName(pid);
-      var emoji=tx.includes('фото')?'📸':'🎬';
-      await sm(ci,emoji+' *Жду '+( tx.includes('фото')?'фото':'видео')+' для объекта:*\n📁 *'+name+'*\n\n_Отправьте или перешлите из другого чата.\nМожно несколько за раз!_');
+      const name=await getProjName(st.project_id);
+      const{count}=await sb.from('project_photos').select('*',{count:'exact',head:true}).eq('project_id',st.project_id);
+      var msg='📋 *Текущий объект:*\n\n📁 *'+name+'*\n📸 Фото: '+(count||0);
+      if(st.comment)msg+='\n💬 Комментарий: _'+st.comment+'_';
+      msg+='\n\n_Отправляйте фото — они попадут сюда_';
+      await sm(ci,msg);
       return res.status(200).json({ok:1});
     }
 
     if(tx==='🔔 Уведомления'||tx==='/notify'){
-      await sm(ci,'🔔 *Уведомления настроены!*\n\nВаш Chat ID: `'+ci+'`\n\nЧтобы получать заявки с сайта, добавьте в Vercel:\n`ADMIN_CHAT_ID = '+ci+'`');
+      await sm(ci,'🔔 *Уведомления*\n\nВаш Chat ID: `'+ci+'`\n\nЧтобы получать заявки с сайта, добавьте в Vercel:\n`ADMIN_CHAT_ID = '+ci+'`');
       return res.status(200).json({ok:1});
     }
 
-    if(tx==='/newproject'){
-      await sm(ci,'📁 Чтобы создать новый объект, откройте:\n🔗 *torals.pro/upload.html*\n\nИли создайте через смету на сайте.');
-      return res.status(200).json({ok:1});
-    }
-
-    // === ФОТО ===
     if(m.photo){
-      const pid=await getState(ci);
-      if(!pid){
-        await sm(ci,'⚠️ Сначала выберите объект!\nНажмите «📁 Выбрать объект»',{reply_markup:{keyboard:menu,resize_keyboard:true}});
+      if(!st.project_id){
+        await sm(ci,'⚠️ Сначала выберите объект!\nНажмите «📁 Выбрать объект» или «➕ Новый объект»',{reply_markup:{keyboard:menu,resize_keyboard:true}});
         return res.status(200).json({ok:1});
       }
       const ph=m.photo[m.photo.length-1];
-      const fr=await fetch('https://api.telegram.org/bot'+BT+'/getFile?file_id='+ph.file_id);
-      const fd=await fr.json();
-      if(fd.ok){
-        const fu='https://api.telegram.org/file/bot'+BT+'/'+fd.result.file_path;
-        const ir=await fetch(fu);
-        const ib=Buffer.from(await ir.arrayBuffer());
-        const fn=Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.jpg';
-        await sb.storage.from('photo').upload(fn,ib,{contentType:'image/jpeg'});
-        const pn=await getProjName(pid);
-        await sb.from('project_photos').insert({project_id:pid,filename:fn,original_name:m.caption||'photo.jpg',uploaded_by:nm});
-        await sm(ci,'✅ Фото загружено!\n📁 '+pn+(m.caption?'\n📝 '+m.caption:''),{reply_to_message_id:m.message_id});
-        if(ACI&&String(ci)!==ACI)await sm(ACI,'📸 *Новое фото*\n📁 '+pn+'\n👤 '+nm);
+      const cap=m.caption||st.comment||null;
+      const ok=await saveMedia(ph.file_id,'jpg','image/jpeg',st.project_id,cap,nm);
+      if(ok){
+        const pn=await getProjName(st.project_id);
+        await sm(ci,'✅ Фото загружено!\n📁 '+pn+(cap?'\n💬 '+cap:''),{reply_to_message_id:m.message_id});
+        if(ACI&&String(ci)!==ACI)await sm(ACI,'📸 *Новое фото*\n📁 '+pn+'\n👤 '+nm+(cap?'\n💬 '+cap:''));
+      }else{
+        await sm(ci,'❌ Ошибка загрузки. Попробуйте ещё раз.');
       }
       return res.status(200).json({ok:1});
     }
 
-    // === ВИДЕО ===
     if(m.video){
-      const pid=await getState(ci);
-      if(!pid){
-        await sm(ci,'⚠️ Сначала выберите объект!\nНажмите «📁 Выбрать объект»',{reply_markup:{keyboard:menu,resize_keyboard:true}});
+      if(!st.project_id){
+        await sm(ci,'⚠️ Сначала выберите объект!',{reply_markup:{keyboard:menu,resize_keyboard:true}});
         return res.status(200).json({ok:1});
       }
-      const vid=m.video;
-      if(vid.file_size>20*1024*1024){
-        await sm(ci,'⚠️ Видео слишком большое (макс 20 МБ)');
+      if(m.video.file_size>20*1024*1024){
+        await sm(ci,'⚠️ Видео больше 20 МБ. Telegram не отдаёт такие боту.\nЗагрузите через сайт: torals.pro/upload.html');
         return res.status(200).json({ok:1});
       }
-      const fr=await fetch('https://api.telegram.org/bot'+BT+'/getFile?file_id='+vid.file_id);
-      const fd=await fr.json();
-      if(fd.ok){
-        const fu='https://api.telegram.org/file/bot'+BT+'/'+fd.result.file_path;
-        const ir=await fetch(fu);
-        const ib=Buffer.from(await ir.arrayBuffer());
-        const ext=(vid.mime_type||'').split('/')[1]||'mp4';
-        const fn=Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.'+ext;
-        await sb.storage.from('photo').upload(fn,ib,{contentType:vid.mime_type||'video/mp4'});
-        const pn=await getProjName(pid);
-        await sb.from('project_photos').insert({project_id:pid,filename:fn,original_name:m.caption||'video.'+ext,uploaded_by:nm});
+      const ext=(m.video.mime_type||'video/mp4').split('/')[1]||'mp4';
+      const cap=m.caption||st.comment||null;
+      const ok=await saveMedia(m.video.file_id,ext,m.video.mime_type||'video/mp4',st.project_id,cap,nm);
+      if(ok){
+        const pn=await getProjName(st.project_id);
         await sm(ci,'✅ Видео загружено!\n📁 '+pn,{reply_to_message_id:m.message_id});
         if(ACI&&String(ci)!==ACI)await sm(ACI,'🎬 *Новое видео*\n📁 '+pn+'\n👤 '+nm);
       }
       return res.status(200).json({ok:1});
     }
 
-    // === ДОКУМЕНТ (фото/видео как файл) ===
     if(m.document){
-      const doc=m.document;
-      const mime=doc.mime_type||'';
+      const mime=m.document.mime_type||'';
       if(!mime.startsWith('image/')&&!mime.startsWith('video/')){
         await sm(ci,'⚠️ Принимаю только фото и видео.');
         return res.status(200).json({ok:1});
       }
-      const pid=await getState(ci);
-      if(!pid){
-        await sm(ci,'⚠️ Сначала выберите объект!\nНажмите «📁 Выбрать объект»');
+      if(!st.project_id){
+        await sm(ci,'⚠️ Сначала выберите объект!');
         return res.status(200).json({ok:1});
       }
-      const fr=await fetch('https://api.telegram.org/bot'+BT+'/getFile?file_id='+doc.file_id);
-      const fd=await fr.json();
-      if(fd.ok){
-        const fu='https://api.telegram.org/file/bot'+BT+'/'+fd.result.file_path;
-        const ir=await fetch(fu);
-        const ib=Buffer.from(await ir.arrayBuffer());
-        const ext=(doc.file_name||'').split('.').pop()||'jpg';
-        const fn=Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.'+ext;
-        await sb.storage.from('photo').upload(fn,ib,{contentType:mime});
-        const pn=await getProjName(pid);
-        await sb.from('project_photos').insert({project_id:pid,filename:fn,original_name:doc.file_name||'file',uploaded_by:nm});
+      const ext=(m.document.file_name||'').split('.').pop()||'jpg';
+      const cap=m.caption||st.comment||null;
+      const ok=await saveMedia(m.document.file_id,ext,mime,st.project_id,cap||m.document.file_name,nm);
+      if(ok){
+        const pn=await getProjName(st.project_id);
         await sm(ci,'✅ Файл загружен!\n📁 '+pn,{reply_to_message_id:m.message_id});
       }
       return res.status(200).json({ok:1});
     }
 
-    // === ТЕКСТ ПО УМОЛЧАНИЮ ===
-    await sm(ci,'📸 Отправьте фото или видео для загрузки.\n📁 Или выберите объект в меню.',{reply_markup:{keyboard:menu,resize_keyboard:true}});
+    await sm(ci,'📸 Отправьте фото или видео.\n📁 Или выберите объект в меню.',{reply_markup:{keyboard:menu,resize_keyboard:true}});
 
   }catch(e){
     console.error('Bot error:',e);
