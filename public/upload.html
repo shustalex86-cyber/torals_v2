@@ -466,6 +466,31 @@ function removePending(i){pending.splice(i,1);if(!pending.length)clearPending();
 function clearPending(){pending=[];$('previewBar').style.display='none';$('previewGrid').innerHTML=''}
 
 // === IMAGE COMPRESSION ===
+// === WAKE LOCK (не давать экрану/вкладке засыпать при загрузке) ===
+var _wakeLock=null;
+async function acquireWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      _wakeLock=await navigator.wakeLock.request('screen');
+      // Перезапрос при возврате на вкладку
+      document.addEventListener('visibilitychange',reacquireWakeLock);
+    }
+  }catch(e){/* не поддерживается — не страшно */}
+}
+async function reacquireWakeLock(){
+  try{
+    if(_wakeLock!==null&&document.visibilityState==='visible'&&'wakeLock' in navigator){
+      _wakeLock=await navigator.wakeLock.request('screen');
+    }
+  }catch(e){}
+}
+function releaseWakeLock(){
+  try{
+    document.removeEventListener('visibilitychange',reacquireWakeLock);
+    if(_wakeLock){_wakeLock.release();_wakeLock=null}
+  }catch(e){}
+}
+
 function compressImage(file,maxSize,quality){
   return new Promise((resolve)=>{
     if(file.type.startsWith('video/')){resolve(file);return}
@@ -502,6 +527,7 @@ function formatSize(bytes){
 
 async function uploadAll(){
   if(!pending.length||!CUR_PID)return;
+  await acquireWakeLock();
   var pw=$('progressWrap'),pf=$('progressFill'),pt=$('progressText');
   pw.style.display='block';
   var total=pending.length,done=0,errors=0,savedBytes=0;
@@ -521,6 +547,7 @@ async function uploadAll(){
     }else{errors++;done++}
     pf.style.width=Math.round(done/total*100)+'%';
   }
+  releaseWakeLock();
   var savedMsg=savedBytes>0?' · Сэкономлено: '+formatSize(savedBytes):'';
   pt.textContent='✅ Загружено: '+(done-errors)+' из '+total+savedMsg;
   setTimeout(()=>{pw.style.display='none';pf.style.width='0%'},4000);
@@ -659,6 +686,7 @@ async function loadYaDisk(){
 
 async function importYaDisk(){
   if(!yadiskFiles.length||!CUR_PID)return;
+  await acquireWakeLock();
   var pw=$('yadiskProgress'),pf=$('yadiskFill'),pt=$('yadiskText');
   pw.style.display='block';
   var total=yadiskFiles.length,done=0,errors=0;
@@ -672,6 +700,7 @@ async function importYaDisk(){
     }catch(e){errors++;done++}
     pf.style.width=Math.round(done/total*100)+'%';
   }
+  releaseWakeLock();
   pt.textContent='✅ Импортировано: '+(done-errors)+' из '+total+(errors?' (ошибок: '+errors+')':'');
   setTimeout(()=>{pw.style.display='none';pf.style.width='0%'},4000);
   yadiskFiles=[];$('yadiskPreview').innerHTML='';loadGallery();
