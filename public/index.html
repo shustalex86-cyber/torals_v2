@@ -408,10 +408,15 @@ $('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 
 async function doLogin(){
   var login=$('loginUser').value.trim().toLowerCase(),pass=$('loginPass').value;
-  const{data,error}=await sb.from('users').select('*').eq('login',login).eq('password',pass).single();
-  if(error||!data){$('loginError').style.display='block';$('loginPass').value='';$('loginPass').focus();return}
-  USER=data;localStorage.setItem('torals_user',JSON.stringify({user:data,ts:Date.now()}));
-  closeModal('modalLogin');enterSmeta();
+  try{
+    var r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({login,password:pass})});
+    var res=await r.json();
+    if(!r.ok||!res.ok){$('loginError').style.display='block';$('loginPass').value='';$('loginPass').focus();return}
+    USER=res.user;localStorage.setItem('torals_user',JSON.stringify({user:res.user,ts:Date.now()}));
+    closeModal('modalLogin');enterSmeta();
+  }catch(e){
+    $('loginError').style.display='block';$('loginPass').value='';
+  }
 }
 
 async function doLogout(){USER=null;localStorage.removeItem('torals_user');history.replaceState(null,'',location.pathname);$('mainSite').classList.remove('hidden');$('smetaPanel').classList.remove('active');window.scrollTo(0,0)}
