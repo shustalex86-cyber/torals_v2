@@ -111,9 +111,9 @@ input[type="file"]{display:none}
 
   <div id="dropZone" class="drop-zone" onclick="document.getElementById('fileInput').click()">
     <div class="drop-zone-icon">📸</div>
-    <div class="drop-zone-text">Перетащите фото и видео сюда</div>
-    <div class="drop-zone-sub">или нажмите для выбора · JPG, PNG, MP4, MOV · до 50 МБ</div>
-    <input type="file" id="fileInput" accept="image/*,video/*" multiple>
+    <div class="drop-zone-text">Перетащите фото сюда</div>
+    <div class="drop-zone-sub">или нажмите для выбора · JPG, PNG · до 50 МБ</div>
+    <input type="file" id="fileInput" accept="image/*" multiple>
   </div>
 
   <!-- YANDEX DISK IMPORT -->
@@ -445,7 +445,7 @@ async function deleteProject(){
 var dz=$('dropZone');
 dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('active')});
 dz.addEventListener('dragleave',e=>{e.preventDefault();dz.classList.remove('active')});
-dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('active');addFiles(Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/')||f.type.startsWith('video/')))});
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('active');addFiles(Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/')))});
 $('fileInput').addEventListener('change',function(){addFiles(Array.from(this.files));this.value=''});
 
 function addFiles(files){
@@ -641,7 +641,7 @@ async function loadYaDisk(){
     var r=await fetch('/api/yadisk?url='+encodeURIComponent(url));
     var data=await r.json();
     if(data.error){$('yadiskPreview').innerHTML='<div style="color:var(--red)">❌ '+data.error+'</div>';return}
-    yadiskFiles=data.files||[];
+    yadiskFiles=(data.files||[]).filter(f=>f.mime&&f.mime.startsWith('image/'));
     if(!yadiskFiles.length){$('yadiskPreview').innerHTML='<div style="color:var(--t3);text-align:center;padding:20px">Фото не найдены в этой папке</div>';return}
     var h='<div style="color:var(--green);margin-bottom:12px;font-weight:600">✅ Найдено: '+yadiskFiles.length+' файлов'+(data.name?' в папке «'+data.name+'»':'')+'</div>';
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:12px">';
