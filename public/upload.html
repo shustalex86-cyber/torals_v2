@@ -264,9 +264,14 @@ if(saved){
 
 async function doLogin(){
   var login=$('loginUser').value.trim().toLowerCase(),pass=$('loginPass').value;
-  const{data,error}=await sb.from('users').select('*').eq('login',login).eq('password',pass).single();
-  if(error||!data){$('loginErr').style.display='block';return}
-  USER=data;localStorage.setItem('torals_user',JSON.stringify({user:data,ts:Date.now()}));showApp();
+  try{
+    var r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({login,password:pass})});
+    var res=await r.json();
+    if(!r.ok||!res.ok){$('loginErr').style.display='block';return}
+    USER=res.user;localStorage.setItem('torals_user',JSON.stringify({user:res.user,ts:Date.now()}));showApp();
+  }catch(e){
+    $('loginErr').style.display='block';
+  }
 }
 
 function doLogout(){
