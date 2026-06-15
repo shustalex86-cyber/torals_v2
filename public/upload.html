@@ -453,52 +453,43 @@ function addFiles(files){
   pending=pending.concat(files);renderPreview();
 }
 
+var _previewUrls=[];
 function renderPreview(){
+  // Release old preview URLs to free memory
+  _previewUrls.forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});
+  _previewUrls=[];
   $('previewBar').style.display=pending.length?'flex':'none';
   $('previewCount').textContent=pending.length+' файл'+(pending.length>4?'ов':pending.length>1?'а':'');
   $('previewGrid').innerHTML=pending.map((f,i)=>{
     var isVid=f.type.startsWith('video/');
-    return '<div class="preview-item">'+(isVid?'<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:2em;color:var(--t3)">🎬</div>':'<img src="'+URL.createObjectURL(f)+'">')+'<button class="remove" onclick="removePending('+i+')">✕</button></div>';
+    var thumb;
+    if(isVid){
+      thumb='<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:2em;color:var(--t3)">🎬</div>';
+    }else{
+      var u=URL.createObjectURL(f);_previewUrls.push(u);
+      thumb='<img src="'+u+'" loading="lazy">';
+    }
+    return '<div class="preview-item">'+thumb+'<button class="remove" onclick="removePending('+i+')">✕</button></div>';
   }).join('');
 }
 
 function removePending(i){pending.splice(i,1);if(!pending.length)clearPending();else renderPreview()}
-function clearPending(){pending=[];$('previewBar').style.display='none';$('previewGrid').innerHTML=''}
+function clearPending(){
+  pending=[];
+  _previewUrls.forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});
+  _previewUrls=[];
+  $('previewBar').style.display='none';$('previewGrid').innerHTML='';
+}
 
 // === IMAGE COMPRESSION ===
-// === WAKE LOCK (не давать экрану/вкладке засыпать при загрузке) ===
-var _wakeLock=null;
-async function acquireWakeLock(){
-  try{
-    if('wakeLock' in navigator){
-      _wakeLock=await navigator.wakeLock.request('screen');
-      // Перезапрос при возврате на вкладку
-      document.addEventListener('visibilitychange',reacquireWakeLock);
-    }
-  }catch(e){/* не поддерживается — не страшно */}
-}
-async function reacquireWakeLock(){
-  try{
-    if(_wakeLock!==null&&document.visibilityState==='visible'&&'wakeLock' in navigator){
-      _wakeLock=await navigator.wakeLock.request('screen');
-    }
-  }catch(e){}
-}
-function releaseWakeLock(){
-  try{
-    document.removeEventListener('visibilitychange',reacquireWakeLock);
-    if(_wakeLock){_wakeLock.release();_wakeLock=null}
-  }catch(e){}
-}
-
 function compressImage(file,maxSize,quality){
   return new Promise((resolve)=>{
     if(file.type.startsWith('video/')){resolve(file);return}
     if(!file.type.startsWith('image/')){resolve(file);return}
     var img=new Image();
+    var objUrl=URL.createObjectURL(file);
     img.onload=function(){
       var w=img.width,h=img.height;
-      // Resize if larger than maxSize
       if(w>maxSize||h>maxSize){
         if(w>h){h=Math.round(h*maxSize/w);w=maxSize}
         else{w=Math.round(w*maxSize/h);h=maxSize}
@@ -508,14 +499,15 @@ function compressImage(file,maxSize,quality){
       var ctx=canvas.getContext('2d');
       ctx.drawImage(img,0,0,w,h);
       canvas.toBlob(function(blob){
+        URL.revokeObjectURL(objUrl);
         if(blob){
           var compressed=new File([blob],file.name.replace(/\.\w+$/,'.jpg'),{type:'image/jpeg'});
           resolve(compressed);
         }else{resolve(file)}
       },'image/jpeg',quality);
     };
-    img.onerror=function(){resolve(file)};
-    img.src=URL.createObjectURL(file);
+    img.onerror=function(){URL.revokeObjectURL(objUrl);resolve(file)};
+    img.src=objUrl;
   });
 }
 
@@ -527,7 +519,6 @@ function formatSize(bytes){
 
 async function uploadAll(){
   if(!pending.length||!CUR_PID)return;
-  await acquireWakeLock();
   var pw=$('progressWrap'),pf=$('progressFill'),pt=$('progressText');
   pw.style.display='block';
   var total=pending.length,done=0,errors=0,savedBytes=0;
@@ -547,7 +538,6 @@ async function uploadAll(){
     }else{errors++;done++}
     pf.style.width=Math.round(done/total*100)+'%';
   }
-  releaseWakeLock();
   var savedMsg=savedBytes>0?' · Сэкономлено: '+formatSize(savedBytes):'';
   pt.textContent='✅ Загружено: '+(done-errors)+' из '+total+savedMsg;
   setTimeout(()=>{pw.style.display='none';pf.style.width='0%'},4000);
@@ -556,28 +546,46 @@ async function uploadAll(){
 }
 
 var selectedPhotos=new Set();
+var _allPhotos=[];
+var _shownCount=0;
+const PAGE_SIZE=30;
 
 async function loadGallery(){
   if(!CUR_PID){$('galleryArea').innerHTML='';return}
   const{data:photos}=await sb.from('project_photos').select('*').eq('project_id',CUR_PID).order('created_at',{ascending:false});
   $('projStats').textContent=(photos?photos.length:0)+' фото';
   selectedPhotos.clear();
-  if(!photos||!photos.length){$('galleryArea').innerHTML='<div class="empty"><div class="empty-icon">📷</div>Фото пока нет. Перетащите файлы в зону выше.</div>';return}
-  var h='<div class="gallery-title">📸 Загруженные фото <span style="color:var(--t3);font-weight:400;font-size:.8em">('+photos.length+')</span></div>';
+  _allPhotos=photos||[];
+  _shownCount=0;
+  if(!_allPhotos.length){$('galleryArea').innerHTML='<div class="empty"><div class="empty-icon">📷</div>Фото пока нет. Перетащите файлы в зону выше.</div>';return}
+  var h='<div class="gallery-title">📸 Загруженные фото <span style="color:var(--t3);font-weight:400;font-size:.8em">('+_allPhotos.length+')</span></div>';
   h+='<div class="select-bar" id="selectBar"><div style="display:flex;align-items:center;gap:12px"><button class="btn btn-gray btn-sm" onclick="selectAll()">☑ Выделить все</button><button class="btn btn-gray btn-sm" onclick="deselectAll()">Снять выделение</button><span style="color:var(--accent-l);font-size:.85em" id="selectedCount">0 выбрано</span></div><button class="btn btn-red btn-sm" onclick="deleteSelected()">🗑 Удалить выбранные</button></div>';
   h+='<div style="margin-bottom:8px"><button class="btn btn-gray btn-sm" onclick="toggleSelectMode()" id="btnSelectMode">☑ Режим выделения</button></div>';
-  h+='<div class="gallery-grid" id="galleryGrid">';
-  for(var p of photos){
-    var url=SUPA_URL+'/storage/v1/object/public/photo/'+p.filename;
-    var ext=p.filename.split('.').pop().toLowerCase();
-    var isVid=['mp4','mov','avi','webm','mkv'].includes(ext);
-    h+='<div class="gallery-item" data-id="'+p.id+'" data-fname="'+p.filename+'" onclick="toggleSelect(this)">';
-    h+='<div class="gallery-item-check" id="chk'+p.id+'"></div>';
-    h+=isVid?'<video src="'+url+'" style="width:100%;height:160px;object-fit:cover" muted></video>':'<img src="'+url+'" loading="lazy">';
-    h+='<div class="gallery-item-info"><span class="gallery-item-name" title="'+p.uploaded_by+'">'+p.uploaded_by+'</span><button class="gallery-item-del" onclick="event.stopPropagation();delPhoto('+p.id+',\''+p.filename+'\')" title="Удалить">🗑</button></div></div>';
-  }
-  h+='</div>';
+  h+='<div class="gallery-grid" id="galleryGrid"></div>';
+  h+='<div id="loadMoreWrap" style="text-align:center;margin-top:16px"></div>';
   $('galleryArea').innerHTML=h;
+  showMorePhotos();
+}
+
+function photoItemHTML(p){
+  var url=SUPA_URL+'/storage/v1/object/public/photo/'+p.filename;
+  var ext=p.filename.split('.').pop().toLowerCase();
+  var isVid=['mp4','mov','avi','webm','mkv'].includes(ext);
+  var media=isVid?'<video src="'+url+'" style="width:100%;height:160px;object-fit:cover" muted preload="none"></video>':'<img src="'+url+'" loading="lazy">';
+  return '<div class="gallery-item" data-id="'+p.id+'" data-fname="'+p.filename+'" onclick="toggleSelect(this)"><div class="gallery-item-check" id="chk'+p.id+'"></div>'+media+'<div class="gallery-item-info"><span class="gallery-item-name" title="'+p.uploaded_by+'">'+p.uploaded_by+'</span><button class="gallery-item-del" onclick="event.stopPropagation();delPhoto('+p.id+',\''+p.filename+'\')" title="Удалить">🗑</button></div></div>';
+}
+
+function showMorePhotos(){
+  var grid=$('galleryGrid');if(!grid)return;
+  var next=_allPhotos.slice(_shownCount,_shownCount+PAGE_SIZE);
+  grid.insertAdjacentHTML('beforeend',next.map(photoItemHTML).join(''));
+  _shownCount+=next.length;
+  var wrap=$('loadMoreWrap');
+  if(_shownCount<_allPhotos.length){
+    wrap.innerHTML='<button class="btn btn-gray" onclick="showMorePhotos()">Показать ещё ('+(_allPhotos.length-_shownCount)+')</button>';
+  }else{
+    wrap.innerHTML='';
+  }
 }
 
 var selectMode=false;
@@ -686,7 +694,6 @@ async function loadYaDisk(){
 
 async function importYaDisk(){
   if(!yadiskFiles.length||!CUR_PID)return;
-  await acquireWakeLock();
   var pw=$('yadiskProgress'),pf=$('yadiskFill'),pt=$('yadiskText');
   pw.style.display='block';
   var total=yadiskFiles.length,done=0,errors=0;
@@ -700,7 +707,6 @@ async function importYaDisk(){
     }catch(e){errors++;done++}
     pf.style.width=Math.round(done/total*100)+'%';
   }
-  releaseWakeLock();
   pt.textContent='✅ Импортировано: '+(done-errors)+' из '+total+(errors?' (ошибок: '+errors+')':'');
   setTimeout(()=>{pw.style.display='none';pf.style.width='0%'},4000);
   yadiskFiles=[];$('yadiskPreview').innerHTML='';loadGallery();
