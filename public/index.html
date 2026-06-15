@@ -84,7 +84,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;animation:blink 1.8s infinite;margin-right:6px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
 .pl{display:flex;flex-direction:column;gap:12px}
-.pr{display:grid;grid-template-columns:1fr 200px 100px;gap:20px;align-items:center;padding:24px 28px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);transition:all .3s}
+.pr{display:grid;grid-template-columns:1fr 200px 100px;gap:20px;align-items:center;padding:24px 28px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);transition:all .3s;cursor:pointer}
 .pr:hover{border-color:var(--accent-b);background:var(--card-h)}
 .pr-name{font-weight:600;font-size:.92em;color:#fff}
 .pr-addr{font-size:.78em;color:var(--t3);margin-top:3px}
@@ -187,6 +187,19 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .img-viewer.active{display:flex}
 .img-viewer img{max-width:95%;max-height:85%;object-fit:contain;border-radius:8px}
 .img-viewer-close{position:absolute;top:16px;right:16px;color:#fff;font-size:1.4em;background:rgba(255,255,255,.12);border:none;border-radius:50%;width:50px;height:50px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10000}
+.proj-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);z-index:9998;overflow-y:auto;padding:24px}
+.proj-modal.active{display:block}
+.proj-modal-inner{max-width:1100px;margin:0 auto;background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:32px;position:relative}
+.proj-modal-close{position:absolute;top:16px;right:16px;color:#fff;font-size:1.4em;background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10}
+.proj-modal h2{font-family:'Outfit',sans-serif;font-size:1.8em;font-weight:700;color:#fff;margin-bottom:8px;padding-right:60px}
+.proj-modal-meta{display:flex;gap:14px;flex-wrap:wrap;color:var(--t3);font-size:.85em;margin-bottom:20px}
+.proj-modal-meta span{display:inline-flex;align-items:center;gap:4px}
+.proj-modal-desc{color:var(--t2);font-size:.95em;line-height:1.7;margin-bottom:28px;padding:16px 20px;background:var(--card);border-radius:12px;border:1px solid var(--border)}
+.proj-modal-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.proj-modal-gallery-item{aspect-ratio:1;border-radius:10px;overflow:hidden;cursor:pointer;background:var(--card);border:1px solid var(--border);transition:all .3s}
+.proj-modal-gallery-item:hover{border-color:var(--accent-b);transform:translateY(-3px)}
+.proj-modal-gallery-item img,.proj-modal-gallery-item video{width:100%;height:100%;object-fit:cover;display:block}
+.proj-modal-empty{text-align:center;padding:60px 20px;color:var(--t3)}
 @media(max-width:860px){.nav{padding:0 20px}.nav-links{display:none}.burger{display:block}.nav-links.open{display:flex;flex-direction:column;position:absolute;top:68px;left:0;width:100%;background:rgba(7,9,14,.97);backdrop-filter:blur(20px);padding:28px;gap:20px;border-bottom:1px solid var(--border)}.hero{padding:120px 24px 80px}.section{padding:100px 24px}.trust-inner{grid-template-columns:1fr 1fr}.svc-grid,.g-grid{grid-template-columns:1fr}.ct-row{grid-template-columns:1fr 1fr}.portal-cta{padding:80px 24px}.portal-grid{grid-template-columns:1fr;gap:48px}.pr{grid-template-columns:1fr;gap:10px}}
 @media(max-width:480px){.ct-row{grid-template-columns:1fr}.sm-row2{grid-template-columns:1fr}.receipts-grid{grid-template-columns:1fr}}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--t3);border-radius:3px}
@@ -209,11 +222,9 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 
 <section class="section" id="gallery"><div class="s-tag">Портфолио</div><h2 class="s-title">Реализованные проекты</h2><p class="s-desc">Каждый объект — комплексный подход от первого кабеля до финальной настройки.</p>
 <div class="gf-bar"><button class="gf on" onclick="gFilter('all',this)">Все</button><button class="gf" onclick="gFilter('electro',this)">Электромонтаж</button><button class="gf" onclick="gFilter('hvac',this)">Вентиляция</button><button class="gf" onclick="gFilter('ac',this)">Кондиционирование</button><button class="gf" onclick="gFilter('smart',this)">Умный дом</button></div>
-<div class="g-grid"><div class="gc rv" data-c="electro"><div class="g-thumb"><span class="g-thumb-l">⚡ Электрика</span></div><div class="g-body"><h4>ЖК «Немецкая деревня», 180 м²</h4><div class="g-meta"><span>Краснодар</span><span>Март 2025</span></div></div></div><div class="gc rv" data-c="hvac"><div class="g-thumb"><span class="g-thumb-l">💨 Вентиляция</span></div><div class="g-body"><h4>Коттедж в Горячем Ключе, 420 м²</h4><div class="g-meta"><span>Горячий Ключ</span><span>Январь 2025</span></div></div></div><div class="gc rv" data-c="smart"><div class="g-thumb"><span class="g-thumb-l">🏠 Умный дом</span></div><div class="g-body"><h4>Пентхаус в ЖК «Центральный»</h4><div class="g-meta"><span>Краснодар</span><span>Декабрь 2024</span></div></div></div><div class="gc rv" data-c="ac"><div class="g-thumb"><span class="g-thumb-l">❄️ Климат</span></div><div class="g-body"><h4>Офис IT-компании, 350 м²</h4><div class="g-meta"><span>Краснодар</span><span>Ноябрь 2024</span></div></div></div><div class="gc rv" data-c="electro"><div class="g-thumb"><span class="g-thumb-l">⚡ Электрика</span></div><div class="g-body"><h4>Таунхаус в Прикубанском</h4><div class="g-meta"><span>Краснодар</span><span>Октябрь 2024</span></div></div></div><div class="gc rv" data-c="smart"><div class="g-thumb"><span class="g-thumb-l">🏠 Умный дом</span></div><div class="g-body"><h4>Загородный дом, 550 м²</h4><div class="g-meta"><span>Динской р-н</span><span>Сентябрь 2024</span></div></div></div></div></section>
+<div class="g-grid" id="portfolioGrid"><div style="text-align:center;padding:40px;color:var(--t3);grid-column:1/-1">Загрузка...</div></div></section>
 
 <section class="section" id="projects"><div class="s-tag"><span class="live-dot"></span> В работе</div><h2 class="s-title">Текущие объекты</h2><p class="s-desc">Ход работ в реальном времени.</p><div class="pl" id="liveProjects"><div style="text-align:center;padding:40px;color:var(--t3)">Загрузка...</div></div></section>
-
-<section class="portal-cta" id="portal">...(всё что внутри)...</section>
 
 <section class="section" id="contact"><div class="s-tag">Связь</div><h2 class="s-title">Обсудить проект</h2><p class="s-desc">Расскажите о задаче — подготовим предложение в течение дня.</p>
 <div class="ct-row"><div class="ct rv"><span class="ico">📞</span><div class="lb">Телефон</div><div class="val"><a href="tel:+79956119005">+7 995 611-90-05</a></div></div><div class="ct rv"><span class="ico">✉️</span><div class="lb">Email</div><div class="val"><a href="mailto:ya@torals.ru">ya@torals.ru</a></div></div><div class="ct rv"><span class="ico">💬</span><div class="lb">Соцсети</div><div class="val"><a href="https://t.me/torals" target="_blank">Telegram</a> · <a href="https://instagram.com/alexander_toropenko_" target="_blank">Instagram</a></div></div><div class="ct rv"><span class="ico">📍</span><div class="lb">Регион</div><div class="val">Краснодар и Краснодарский край</div></div></div>
@@ -241,6 +252,13 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 </div>
 
 <div class="img-viewer" id="imgViewer" onclick="this.classList.remove('active')"><button class="img-viewer-close" onclick="event.stopPropagation();document.getElementById('imgViewer').classList.remove('active')">✕</button><img id="imgViewerImg" src=""></div>
+
+<div class="proj-modal" id="projModal">
+  <div class="proj-modal-inner">
+    <button class="proj-modal-close" onclick="closeProjModal()">✕</button>
+    <div id="projModalContent"></div>
+  </div>
+</div>
 <div class="modal-overlay" id="modalLogin"><div class="modal" style="max-width:380px"><div style="text-align:center;margin-bottom:24px"><div style="font-family:'Outfit',sans-serif;font-size:1.4em;font-weight:700;letter-spacing:4px;color:#fff">ТОРАЛС</div><div style="font-size:.75em;color:var(--t3)">Вход для сотрудников</div></div><label style="font-size:.78em;color:var(--t2)">Логин</label><input type="text" id="loginUser" placeholder="Введите логин" autocomplete="off"><label style="font-size:.78em;color:var(--t2)">Пароль</label><input type="password" id="loginPass" placeholder="Введите пароль"><div id="loginError" style="color:var(--red);font-size:.82em;display:none">Неверный логин или пароль</div><div class="modal-buttons" style="margin-top:20px"><button class="sm-btn sm-btn-gray" onclick="closeModal('modalLogin')">Отмена</button><button class="sm-btn sm-btn-accent" style="flex:2" onclick="doLogin()">Войти</button></div></div></div>
 <div class="modal-overlay" id="modalAddWork"><div class="modal"><h3>➕ Добавить позицию</h3><label style="font-size:.78em;color:var(--t2)">Наименование</label><input type="text" id="newWorkName"><label style="font-size:.78em;color:var(--t2)">Единица</label><select id="newWorkUnit"><option>шт.</option><option>м.п.</option><option>м.кв.</option><option>мод.</option><option>см.</option><option>компл.</option><option>усл.</option></select><label style="font-size:.78em;color:var(--t2)">Количество</label><input type="number" id="newWorkQty" value="0" min="0"><div class="hide" id="newWorkPriceWrap"><label style="font-size:.78em;color:var(--t2)">Цена (моя)</label><input type="number" id="newWorkPrice" value="0" min="0"></div><div class="modal-buttons"><button class="sm-btn sm-btn-gray" onclick="closeModal('modalAddWork')">Отмена</button><button class="sm-btn sm-btn-accent" onclick="submitNewWork()">Добавить</button></div></div></div>
 <div class="modal-overlay" id="modalNewProj"><div class="modal"><h3>📁 Новый объект</h3><label style="font-size:.78em;color:var(--t2)">Название</label><input type="text" id="npName"><label style="font-size:.78em;color:var(--t2)">Заказчик</label><input type="text" id="npClient"><label style="font-size:.78em;color:var(--t2)">Адрес</label><input type="text" id="npAddr"><div class="modal-buttons"><button class="sm-btn sm-btn-gray" onclick="closeModal('modalNewProj')">Отмена</button><button class="sm-btn sm-btn-accent" onclick="submitNewProject()">Создать</button></div></div></div>
@@ -265,24 +283,104 @@ function isAdmin(){return USER&&USER.role==='admin'}
 // ===== SITE SCRIPTS =====
 var obs=new IntersectionObserver(e=>{e.forEach(x=>{if(x.isIntersecting)x.target.classList.add('vis')})},{threshold:.1});
 document.querySelectorAll('.rv').forEach(el=>obs.observe(el));
-function gFilter(c,btn){document.querySelectorAll('.gf').forEach(b=>b.classList.remove('on'));btn.classList.add('on');document.querySelectorAll('.gc').forEach(card=>{var show=c==='all'||card.dataset.c===c;card.style.display=show?'':'none'})}
 document.querySelectorAll('.nav-links a').forEach(a=>{a.addEventListener('click',()=>$('navLinks').classList.remove('open'))});
 
-// Live projects
+// ===== CATEGORY HELPERS =====
+const CAT_LABEL={electro:'⚡ Электромонтаж',hvac:'💨 Вентиляция',ac:'❄️ Кондиционирование',smart:'🏠 Умный дом'};
+const CAT_SHORT={electro:'⚡ Электрика',hvac:'💨 Вентиляция',ac:'❄️ Климат',smart:'🏠 Умный дом'};
+function fmtMonth(s){if(!s)return '';try{var d=new Date(s+'-01');return ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'][d.getMonth()]+' '+d.getFullYear()}catch(e){return s}}
+
+// ===== PORTFOLIO (completed projects) =====
+var PORTFOLIO_DATA=[];
+async function loadPortfolio(){
+  try{
+    const{data}=await sb.from('projects').select('*').eq('status','completed').order('completion_date',{ascending:false});
+    PORTFOLIO_DATA=data||[];
+    renderPortfolio('all');
+  }catch(e){console.log('Portfolio error:',e)}
+}
+function renderPortfolio(cat){
+  var el=$('portfolioGrid');
+  var items=cat==='all'?PORTFOLIO_DATA:PORTFOLIO_DATA.filter(p=>(p.category||'electro')===cat);
+  if(!items.length){el.innerHTML='<div style="text-align:center;padding:40px;color:var(--t3);grid-column:1/-1">Объекты в этой категории скоро появятся</div>';return}
+  var h='';
+  for(var p of items){
+    var c=p.category||'electro';
+    var coverUrl=p.cover_filename?(SUPA_URL+'/storage/v1/object/public/photo/'+p.cover_filename):null;
+    var thumb=coverUrl?'<img src="'+coverUrl+'" loading="lazy" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">':'<span class="g-thumb-l">'+CAT_SHORT[c]+'</span>';
+    var meta='';
+    if(p.address)meta+='<span>'+esc(p.address)+'</span>';
+    if(p.completion_date)meta+='<span>'+fmtMonth(p.completion_date)+'</span>';
+    if(p.area)meta+='<span>'+esc(p.area)+'</span>';
+    h+='<div class="gc rv" data-c="'+c+'" onclick="openProj('+p.id+')" style="cursor:pointer"><div class="g-thumb" style="position:relative;overflow:hidden">'+thumb+'</div><div class="g-body"><h4>'+esc(p.name)+'</h4><div class="g-meta">'+meta+'</div></div></div>';
+  }
+  el.innerHTML=h;el.querySelectorAll('.rv').forEach(r=>obs.observe(r));
+}
+loadPortfolio();
+
+function gFilter(c,btn){document.querySelectorAll('.gf').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderPortfolio(c)}
+
+// ===== LIVE PROJECTS =====
 async function loadLiveProjects(){
   try{
-    const{data}=await sb.from('projects').select('id,name,address,status').eq('status','active');
+    const{data}=await sb.from('projects').select('id,name,address,status').eq('status','active').order('created_at',{ascending:false});
     if(!data||!data.length){$('liveProjects').innerHTML='<div style="text-align:center;padding:40px;color:var(--t3)">Объекты скоро появятся</div>';return}
     var h='';for(var p of data){
       const{count}=await sb.from('project_photos').select('*',{count:'exact',head:true}).eq('project_id',p.id);
       const{data:w}=await sb.from('works').select('qty').eq('project_id',p.id);
       var total=w?w.length:1,done=w?w.filter(x=>x.qty>0).length:0,pct=total?Math.round(done/total*100):0;
-      h+='<div class="pr rv"><div><div class="pr-name">'+esc(p.name)+'</div><div class="pr-addr">'+esc(p.address)+'</div></div><div class="prog-w"><div class="prog-t"><div class="prog-b" style="width:'+pct+'%"></div></div><span class="prog-v">'+pct+'%</span></div><div style="text-align:right"><span class="pr-mc">'+(count||0)+' фото</span></div></div>';
+      h+='<div class="pr rv" onclick="openProj('+p.id+')"><div><div class="pr-name">'+esc(p.name)+'</div><div class="pr-addr">'+esc(p.address||'')+'</div></div><div class="prog-w"><div class="prog-t"><div class="prog-b" style="width:'+pct+'%"></div></div><span class="prog-v">'+pct+'%</span></div><div style="text-align:right"><span class="pr-mc">'+(count||0)+' фото</span></div></div>';
     }
     $('liveProjects').innerHTML=h;$('liveProjects').querySelectorAll('.rv').forEach(r=>obs.observe(r));
   }catch(e){console.log('Live projects error:',e)}
 }
 loadLiveProjects();
+
+// ===== PROJECT MODAL (gallery) =====
+async function openProj(id){
+  document.body.style.overflow='hidden';
+  $('projModal').classList.add('active');
+  $('projModalContent').innerHTML='<div style="text-align:center;padding:60px;color:var(--t3)">Загрузка...</div>';
+  try{
+    const{data:p}=await sb.from('projects').select('*').eq('id',id).single();
+    const{data:photos}=await sb.from('project_photos').select('*').eq('project_id',id).order('created_at',{ascending:false});
+    if(!p){$('projModalContent').innerHTML='<div class="proj-modal-empty">Объект не найден</div>';return}
+    var meta='';
+    if(p.address)meta+='<span>📍 '+esc(p.address)+'</span>';
+    if(p.area)meta+='<span>📐 '+esc(p.area)+'</span>';
+    if(p.category)meta+='<span>'+CAT_LABEL[p.category||'electro']+'</span>';
+    if(p.completion_date)meta+='<span>📅 '+fmtMonth(p.completion_date)+'</span>';
+    if(p.status==='active')meta+='<span style="color:var(--accent-l)"><span class="live-dot"></span>В работе</span>';
+    var h='<h2>'+esc(p.name)+'</h2>';
+    h+='<div class="proj-modal-meta">'+meta+'</div>';
+    if(p.description)h+='<div class="proj-modal-desc">'+esc(p.description)+'</div>';
+    if(!photos||!photos.length){
+      h+='<div class="proj-modal-empty"><div style="font-size:3em;margin-bottom:12px;opacity:.3">📷</div>Фото будут добавлены позже</div>';
+    }else{
+      h+='<div style="color:var(--t3);font-size:.82em;margin-bottom:14px">📸 Фотогалерея — '+photos.length+' '+(photos.length===1?'фото':photos.length<5?'фото':'фото')+'</div>';
+      h+='<div class="proj-modal-gallery">';
+      for(var ph of photos){
+        var url=SUPA_URL+'/storage/v1/object/public/photo/'+ph.filename;
+        var ext=ph.filename.split('.').pop().toLowerCase();
+        var isVid=['mp4','mov','avi','webm','mkv'].includes(ext);
+        if(isVid){
+          h+='<div class="proj-modal-gallery-item"><video src="'+url+'" controls muted></video></div>';
+        }else{
+          h+='<div class="proj-modal-gallery-item" onclick="viewImg(\''+url+'\')"><img src="'+url+'" loading="lazy"></div>';
+        }
+      }
+      h+='</div>';
+    }
+    $('projModalContent').innerHTML=h;
+  }catch(e){
+    $('projModalContent').innerHTML='<div class="proj-modal-empty">Ошибка загрузки</div>';
+    console.error(e);
+  }
+}
+function closeProjModal(){$('projModal').classList.remove('active');document.body.style.overflow=''}
+function viewImg(src){$('imgViewerImg').src=src;$('imgViewer').classList.add('active')}
+// Close on background click
+$('projModal').addEventListener('click',function(e){if(e.target===this)closeProjModal()});
 
 // ===== CONTACT FORM =====
 async function submitContact(){
