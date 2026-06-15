@@ -177,29 +177,14 @@ module.exports=async(req,res)=>{
     }
 
     if(m.video){
-      if(!st.project_id){
-        await sm(ci,'⚠️ Сначала выберите объект!',{reply_markup:{keyboard:menu,resize_keyboard:true}});
-        return res.status(200).json({ok:1});
-      }
-      if(m.video.file_size>20*1024*1024){
-        await sm(ci,'⚠️ Видео больше 20 МБ. Telegram не отдаёт такие боту.\nЗагрузите через сайт: torals.pro/upload.html');
-        return res.status(200).json({ok:1});
-      }
-      const ext=(m.video.mime_type||'video/mp4').split('/')[1]||'mp4';
-      const cap=m.caption||st.comment||null;
-      const ok=await saveMedia(m.video.file_id,ext,m.video.mime_type||'video/mp4',st.project_id,cap,nm);
-      if(ok){
-        const pn=await getProjName(st.project_id);
-        await sm(ci,'✅ Видео загружено!\n📁 '+pn,{reply_to_message_id:m.message_id});
-        if(ACI&&String(ci)!==ACI)await sm(ACI,'🎬 *Новое видео*\n📁 '+pn+'\n👤 '+nm);
-      }
+      await sm(ci,'📸 Сейчас принимаются только фото.\nЗагрузка видео временно отключена.',{reply_markup:{keyboard:menu,resize_keyboard:true}});
       return res.status(200).json({ok:1});
     }
 
     if(m.document){
       const mime=m.document.mime_type||'';
-      if(!mime.startsWith('image/')&&!mime.startsWith('video/')){
-        await sm(ci,'⚠️ Принимаю только фото и видео.');
+      if(!mime.startsWith('image/')){
+        await sm(ci,'📸 Принимаются только фото (JPG, PNG).');
         return res.status(200).json({ok:1});
       }
       if(!st.project_id){
