@@ -401,21 +401,34 @@ async function doLogin(){
   var login=$('loginUser').value.trim().toLowerCase(),pass=$('loginPass').value;
   const{data,error}=await sb.from('users').select('*').eq('login',login).eq('password',pass).single();
   if(error||!data){$('loginError').style.display='block';$('loginPass').value='';$('loginPass').focus();return}
-  USER=data;localStorage.setItem('torals_user',JSON.stringify(data));
+  USER=data;localStorage.setItem('torals_user',JSON.stringify({user:data,ts:Date.now()}));
   closeModal('modalLogin');enterSmeta();
 }
 
-async function doLogout(){USER=null;localStorage.removeItem('torals_user');$('mainSite').classList.remove('hidden');$('smetaPanel').classList.remove('active');window.scrollTo(0,0)}
+async function doLogout(){USER=null;localStorage.removeItem('torals_user');history.replaceState(null,'',location.pathname);$('mainSite').classList.remove('hidden');$('smetaPanel').classList.remove('active');window.scrollTo(0,0)}
 function showMain(){doLogout()}
 
-// Check saved login
+// Check saved login — only valid for 8 hours AND only enter if URL has #cabinet
+var SESSION_MAX_MS=8*60*60*1000;
 var saved=localStorage.getItem('torals_user');
-if(saved){try{USER=JSON.parse(saved);enterSmeta()}catch(e){localStorage.removeItem('torals_user')}}
+if(saved){
+  try{
+    var s=JSON.parse(saved);
+    if(s&&s.user&&s.ts&&(Date.now()-s.ts)<SESSION_MAX_MS){
+      USER=s.user;
+      // Только если пользователь явно зашёл в кабинет (#cabinet в URL)
+      if(location.hash==='#cabinet')enterSmeta();
+    }else{
+      localStorage.removeItem('torals_user');
+    }
+  }catch(e){localStorage.removeItem('torals_user')}
+}
 
 // ===== ENTER SMETA =====
 async function enterSmeta(){
   $('smUserName').textContent=USER.display_name;
   $('mainSite').classList.add('hidden');$('smetaPanel').classList.add('active');window.scrollTo(0,0);
+  if(location.hash!=='#cabinet')history.replaceState(null,'','#cabinet');
   var fl=$('floatTg');if(fl)fl.style.display='none';
   if(isAdmin()){$('pctBox').classList.remove('hide');$('btnNewProj').classList.remove('hide');$('grpAdvOwner').classList.remove('hide');$('grpRemOwner').classList.remove('hide');$('newWorkPriceWrap').classList.remove('hide')}
   else{$('pctBox').classList.add('hide');$('btnNewProj').classList.add('hide');$('grpAdvOwner').classList.add('hide');$('grpRemOwner').classList.add('hide');$('newWorkPriceWrap').classList.add('hide')}

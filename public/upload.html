@@ -91,7 +91,8 @@ input[type="file"]{display:none}
   <h1>ТОРАЛС <span style="font-weight:300;color:var(--accent-l);font-size:.6em;letter-spacing:1px">фото-менеджер</span></h1>
   <div style="display:flex;gap:12px;align-items:center">
     <span style="color:var(--accent-l);font-size:.85em">👤 <strong id="userName"></strong></span>
-    <a href="/">← На сайт</a>
+    <a href="/" style="color:var(--accent-l);text-decoration:none;font-size:.85em">← На сайт</a>
+    <button onclick="doLogout()" style="background:rgba(255,255,255,.08);border:1px solid var(--border2);color:var(--t1);padding:6px 12px;border-radius:8px;font-size:.82em;cursor:pointer;font-family:'DM Sans',sans-serif">Выйти</button>
   </div>
 </div>
 
@@ -233,14 +234,33 @@ function toast(m){var o=document.querySelector('.toast');if(o)o.remove();var el=
 
 // Login
 $('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+var SESSION_MAX_MS=8*60*60*1000;
 var saved=localStorage.getItem('torals_user');
-if(saved){try{USER=JSON.parse(saved);showApp()}catch(e){}}
+if(saved){
+  try{
+    var s=JSON.parse(saved);
+    // Support both old format (raw user) and new format ({user, ts})
+    if(s&&s.user&&s.ts){
+      if((Date.now()-s.ts)<SESSION_MAX_MS){
+        USER=s.user;showApp();
+      }else{localStorage.removeItem('torals_user')}
+    }else if(s&&s.login){
+      // Old format - require re-login for safety
+      localStorage.removeItem('torals_user');
+    }
+  }catch(e){localStorage.removeItem('torals_user')}
+}
 
 async function doLogin(){
   var login=$('loginUser').value.trim().toLowerCase(),pass=$('loginPass').value;
   const{data,error}=await sb.from('users').select('*').eq('login',login).eq('password',pass).single();
   if(error||!data){$('loginErr').style.display='block';return}
-  USER=data;localStorage.setItem('torals_user',JSON.stringify(data));showApp();
+  USER=data;localStorage.setItem('torals_user',JSON.stringify({user:data,ts:Date.now()}));showApp();
+}
+
+function doLogout(){
+  localStorage.removeItem('torals_user');
+  location.href='/';
 }
 
 async function showApp(){
