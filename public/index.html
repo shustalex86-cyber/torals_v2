@@ -224,7 +224,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 <div class="gf-bar"><button class="gf on" onclick="gFilter('all',this)">Все</button><button class="gf" onclick="gFilter('electro',this)">Электромонтаж</button><button class="gf" onclick="gFilter('hvac',this)">Вентиляция</button><button class="gf" onclick="gFilter('ac',this)">Кондиционирование</button><button class="gf" onclick="gFilter('smart',this)">Умный дом</button></div>
 <div class="g-grid" id="portfolioGrid"><div style="text-align:center;padding:40px;color:var(--t3);grid-column:1/-1">Загрузка...</div></div></section>
 
-<section class="section" id="projects"><div class="s-tag"><span class="live-dot"></span> В работе</div><h2 class="s-title">Текущие объекты</h2><p class="s-desc">Ход работ в реальном времени.</p><div class="pl" id="liveProjects"><div style="text-align:center;padding:40px;color:var(--t3)">Загрузка...</div></div></section>
+<section class="section" id="projects"><div class="s-tag"><span class="live-dot"></span> Объекты</div><h2 class="s-title">Текущие объекты</h2><p class="s-desc">Ход работ в реальном времени. Нажмите на объект, чтобы посмотреть фотогалерею.</p><div class="pl" id="liveProjects"><div style="text-align:center;padding:40px;color:var(--t3)">Загрузка...</div></div></section>
 
 <section class="section" id="contact"><div class="s-tag">Связь</div><h2 class="s-title">Обсудить проект</h2><p class="s-desc">Расскажите о задаче — подготовим предложение в течение дня.</p>
 <div class="ct-row"><div class="ct rv"><span class="ico">📞</span><div class="lb">Телефон</div><div class="val"><a href="tel:+79956119005">+7 995 611-90-05</a></div></div><div class="ct rv"><span class="ico">✉️</span><div class="lb">Email</div><div class="val"><a href="mailto:ya@torals.ru">ya@torals.ru</a></div></div><div class="ct rv"><span class="ico">💬</span><div class="lb">Соцсети</div><div class="val"><a href="https://t.me/torals" target="_blank">Telegram</a> · <a href="https://instagram.com/alexander_toropenko_" target="_blank">Instagram</a></div></div><div class="ct rv"><span class="ico">📍</span><div class="lb">Регион</div><div class="val">Краснодар и Краснодарский край</div></div></div>
@@ -323,13 +323,21 @@ function gFilter(c,btn){document.querySelectorAll('.gf').forEach(b=>b.classList.
 // ===== LIVE PROJECTS =====
 async function loadLiveProjects(){
   try{
-    const{data}=await sb.from('projects').select('id,name,address,status').eq('status','active').order('created_at',{ascending:false});
+    const{data}=await sb.from('projects').select('*').in('status',['active','waiting']).order('created_at',{ascending:false});
     if(!data||!data.length){$('liveProjects').innerHTML='<div style="text-align:center;padding:40px;color:var(--t3)">Объекты скоро появятся</div>';return}
     var h='';for(var p of data){
       const{count}=await sb.from('project_photos').select('*',{count:'exact',head:true}).eq('project_id',p.id);
-      const{data:w}=await sb.from('works').select('qty').eq('project_id',p.id);
-      var total=w?w.length:1,done=w?w.filter(x=>x.qty>0).length:0,pct=total?Math.round(done/total*100):0;
-      h+='<div class="pr rv" onclick="openProj('+p.id+')"><div><div class="pr-name">'+esc(p.name)+'</div><div class="pr-addr">'+esc(p.address||'')+'</div></div><div class="prog-w"><div class="prog-t"><div class="prog-b" style="width:'+pct+'%"></div></div><span class="prog-v">'+pct+'%</span></div><div style="text-align:right"><span class="pr-mc">'+(count||0)+' фото</span></div></div>';
+      // Progress: manual override or auto from smeta
+      var pct;
+      if(p.manual_progress!==null&&p.manual_progress!==undefined){
+        pct=p.manual_progress;
+      }else{
+        const{data:w}=await sb.from('works').select('qty').eq('project_id',p.id);
+        var total=w?w.length:1,done=w?w.filter(x=>x.qty>0).length:0;pct=total?Math.round(done/total*100):0;
+      }
+      var badge=p.status==='waiting'?'<span style="display:inline-block;padding:2px 10px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:6px;font-size:.68em;font-weight:600;color:var(--orange);margin-top:4px">⏸ Ожидает этапа</span>':'';
+      var barColor=p.status==='waiting'?'background:linear-gradient(90deg,var(--orange),#fbbf24)':'background:linear-gradient(90deg,var(--accent),var(--accent-l))';
+      h+='<div class="pr rv" onclick="openProj('+p.id+')"><div><div class="pr-name">'+esc(p.name)+'</div><div class="pr-addr">'+esc(p.address||'')+'</div>'+badge+'</div><div class="prog-w"><div class="prog-t"><div class="prog-b" style="width:'+pct+'%;'+barColor+'"></div></div><span class="prog-v">'+pct+'%</span></div><div style="text-align:right"><span class="pr-mc">'+(count||0)+' фото</span></div></div>';
     }
     $('liveProjects').innerHTML=h;$('liveProjects').querySelectorAll('.rv').forEach(r=>obs.observe(r));
   }catch(e){console.log('Live projects error:',e)}
@@ -351,6 +359,7 @@ async function openProj(id){
     if(p.category)meta+='<span>'+CAT_LABEL[p.category||'electro']+'</span>';
     if(p.completion_date)meta+='<span>📅 '+fmtMonth(p.completion_date)+'</span>';
     if(p.status==='active')meta+='<span style="color:var(--accent-l)"><span class="live-dot"></span>В работе</span>';
+    if(p.status==='waiting')meta+='<span style="color:var(--orange)">⏸ Ожидает следующего этапа</span>';
     var h='<h2>'+esc(p.name)+'</h2>';
     h+='<div class="proj-modal-meta">'+meta+'</div>';
     if(p.description)h+='<div class="proj-modal-desc">'+esc(p.description)+'</div>';
