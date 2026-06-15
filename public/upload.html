@@ -185,6 +185,7 @@ input[type="file"]{display:none}
           <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Статус</label>
           <select id="em_status" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
             <option value="active">🔧 В работе (текущий)</option>
+            <option value="waiting">⏸ Ожидает следующего этапа</option>
             <option value="completed">✅ Завершён (портфолио)</option>
             <option value="hidden">🙈 Скрыт</option>
           </select>
@@ -204,15 +205,25 @@ input[type="file"]{display:none}
         <input type="month" id="em_completion" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
       </div>
       <div>
+        <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Готовность объекта (%)</label>
+        <div style="display:flex;align-items:center;gap:12px">
+          <input type="range" id="em_progress_range" min="0" max="100" step="5" value="0" oninput="syncProgress('range')" style="flex:1;accent-color:var(--accent)">
+          <input type="number" id="em_progress" min="0" max="100" placeholder="авто" oninput="syncProgress('num')" style="width:90px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--accent-l);font-weight:600;text-align:center;font-family:'DM Sans',sans-serif">
+          <span style="color:var(--accent-l);font-weight:700">%</span>
+        </div>
+        <div style="color:var(--t3);font-size:.75em;margin-top:4px">Оставьте пустым «авто» — процент посчитается из сметы. Или задайте вручную ползунком.</div>
+        <button class="btn btn-gray btn-sm" onclick="clearProgress()" style="margin-top:6px">↺ Сбросить на авто</button>
+      </div>
+      <div>
         <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Описание (для портфолио)</label>
         <textarea id="em_description" rows="3" placeholder="Краткое описание объекта..." style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif;resize:vertical"></textarea>
       </div>
       <div>
         <label style="font-size:.78em;color:var(--t2);display:block;margin-bottom:4px">Обложка (главное фото)</label>
-        <select id="em_cover" onchange="changeCoverPreview()" style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--t1);font-family:'DM Sans',sans-serif">
-          <option value="">— Не выбрана —</option>
-        </select>
-        <div id="coverPreview"></div>
+        <div id="coverGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;max-height:240px;overflow-y:auto;padding:8px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px">
+          <div style="color:var(--t3);font-size:.8em;grid-column:1/-1;text-align:center;padding:20px">Загрузите фото в объект, чтобы выбрать обложку</div>
+        </div>
+        <input type="hidden" id="em_cover" value="">
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-top:20px">
@@ -320,29 +331,63 @@ async function editProject(){
   $('em_description').value=cur.description||'';
   $('em_completion').value=cur.completion_date||'';
   $('em_area').value=cur.area||'';
-  // Load cover options from project photos
+  // Progress
+  var mp=cur.manual_progress;
+  $('em_progress').value=(mp===null||mp===undefined)?'':mp;
+  $('em_progress_range').value=(mp===null||mp===undefined)?0:mp;
+  // Cover - visual grid
+  $('em_cover').value=cur.cover_filename||'';
   const{data:photos}=await sb.from('project_photos').select('filename').eq('project_id',CUR_PID).order('created_at',{ascending:false});
-  var coverSel=$('em_cover');
-  coverSel.innerHTML='<option value="">— Не выбрана —</option>';
-  if(photos&&photos.length){
-    for(var p of photos){
-      var sel=p.filename===cur.cover_filename?' selected':'';
-      coverSel.innerHTML+='<option value="'+p.filename+'"'+sel+'>'+p.filename.substring(0,30)+'...</option>';
-    }
+  var grid=$('coverGrid');
+  if(!photos||!photos.length){
+    grid.innerHTML='<div style="color:var(--t3);font-size:.8em;grid-column:1/-1;text-align:center;padding:20px">Загрузите фото в объект, чтобы выбрать обложку</div>';
+  }else{
+    grid.innerHTML=photos.map(p=>{
+      var url=SUPA_URL+'/storage/v1/object/public/photo/'+p.filename;
+      var ext=p.filename.split('.').pop().toLowerCase();
+      var isVid=['mp4','mov','avi','webm','mkv'].includes(ext);
+      var isSel=p.filename===cur.cover_filename;
+      if(isVid)return '';
+      return '<div onclick="selectCover(\''+p.filename+'\')" data-fname="'+p.filename+'" class="cover-opt'+(isSel?' sel':'')+'" style="aspect-ratio:1;border-radius:8px;overflow:hidden;cursor:pointer;border:3px solid '+(isSel?'var(--accent)':'transparent')+';position:relative"><img src="'+url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy">'+(isSel?'<div style="position:absolute;top:2px;right:2px;background:var(--accent);color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:.6em">✓</div>':'')+'</div>';
+    }).join('');
   }
-  $('coverPreview').innerHTML=cur.cover_filename?'<img src="'+SUPA_URL+'/storage/v1/object/public/photo/'+cur.cover_filename+'" style="max-width:200px;border-radius:8px;margin-top:8px">':'<div style="color:var(--t3);font-size:.82em;margin-top:8px">Загрузите фото в объект, чтобы выбрать обложку</div>';
   $('editModal').style.display='flex';
+}
+
+function selectCover(fname){
+  $('em_cover').value=fname;
+  document.querySelectorAll('.cover-opt').forEach(el=>{
+    var isSel=el.dataset.fname===fname;
+    el.style.border='3px solid '+(isSel?'var(--accent)':'transparent');
+    el.querySelector('div')&&el.querySelector('div').remove();
+    if(isSel){
+      var check=document.createElement('div');
+      check.style.cssText='position:absolute;top:2px;right:2px;background:var(--accent);color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:.6em';
+      check.textContent='✓';
+      el.appendChild(check);
+    }
+  });
+}
+
+function syncProgress(src){
+  if(src==='range'){
+    $('em_progress').value=$('em_progress_range').value;
+  }else{
+    var v=parseInt($('em_progress').value);
+    if(!isNaN(v))$('em_progress_range').value=Math.max(0,Math.min(100,v));
+  }
+}
+
+function clearProgress(){
+  $('em_progress').value='';
+  $('em_progress_range').value=0;
 }
 
 function closeEditModal(){$('editModal').style.display='none'}
 
-function changeCoverPreview(){
-  var fname=$('em_cover').value;
-  $('coverPreview').innerHTML=fname?'<img src="'+SUPA_URL+'/storage/v1/object/public/photo/'+fname+'" style="max-width:200px;border-radius:8px;margin-top:8px">':'';
-}
-
 async function saveProjectEdit(){
   if(!CUR_PID)return;
+  var progVal=$('em_progress').value.trim();
   var body={
     name:$('em_name').value.trim(),
     client:$('em_client').value.trim(),
@@ -352,7 +397,8 @@ async function saveProjectEdit(){
     description:$('em_description').value.trim(),
     completion_date:$('em_completion').value,
     area:$('em_area').value.trim(),
-    cover_filename:$('em_cover').value||null
+    cover_filename:$('em_cover').value||null,
+    manual_progress:progVal===''?null:parseInt(progVal)
   };
   if(!body.name){alert('Введите название');return}
   const{error}=await sb.from('projects').update(body).eq('id',CUR_PID);
