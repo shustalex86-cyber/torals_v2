@@ -224,6 +224,7 @@ input[type="file"]{display:none}
           <div style="color:var(--t3);font-size:.8em;grid-column:1/-1;text-align:center;padding:20px">Загрузите фото в объект, чтобы выбрать обложку</div>
         </div>
         <input type="hidden" id="em_cover" value="">
+        <div id="coverMoreWrap" style="text-align:center"></div>
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-top:20px">
@@ -340,27 +341,45 @@ async function editProject(){
   var mp=cur.manual_progress;
   $('em_progress').value=(mp===null||mp===undefined)?'':mp;
   $('em_progress_range').value=(mp===null||mp===undefined)?0:mp;
-  // Cover - visual grid
+  // Cover - visual grid (paginated to avoid lag)
   $('em_cover').value=cur.cover_filename||'';
   const{data:photos}=await sb.from('project_photos').select('filename').eq('project_id',CUR_PID).order('created_at',{ascending:false});
   var grid=$('coverGrid');
-  if(!photos||!photos.length){
+  _coverPhotos=(photos||[]).filter(p=>{var e=p.filename.split('.').pop().toLowerCase();return !['mp4','mov','avi','webm','mkv'].includes(e)});
+  _coverShown=0;_coverSelected=cur.cover_filename||'';
+  if(!_coverPhotos.length){
     grid.innerHTML='<div style="color:var(--t3);font-size:.8em;grid-column:1/-1;text-align:center;padding:20px">Загрузите фото в объект, чтобы выбрать обложку</div>';
+    $('coverMoreWrap')&&($('coverMoreWrap').innerHTML='');
   }else{
-    grid.innerHTML=photos.map(p=>{
-      var url=SUPA_URL+'/storage/v1/object/public/photo/'+p.filename;
-      var ext=p.filename.split('.').pop().toLowerCase();
-      var isVid=['mp4','mov','avi','webm','mkv'].includes(ext);
-      var isSel=p.filename===cur.cover_filename;
-      if(isVid)return '';
-      return '<div onclick="selectCover(\''+p.filename+'\')" data-fname="'+p.filename+'" class="cover-opt'+(isSel?' sel':'')+'" style="aspect-ratio:1;border-radius:8px;overflow:hidden;cursor:pointer;border:3px solid '+(isSel?'var(--accent)':'transparent')+';position:relative"><img src="'+url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy">'+(isSel?'<div style="position:absolute;top:2px;right:2px;background:var(--accent);color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:.6em">✓</div>':'')+'</div>';
-    }).join('');
+    grid.innerHTML='';
+    showMoreCovers();
   }
   $('editModal').style.display='flex';
 }
 
+var _coverPhotos=[],_coverShown=0,_coverSelected='';
+const COVER_PAGE=24;
+function coverItemHTML(p){
+  var url=SUPA_URL+'/storage/v1/object/public/photo/'+p.filename;
+  var isSel=p.filename===_coverSelected;
+  return '<div onclick="selectCover(\''+p.filename+'\')" data-fname="'+p.filename+'" class="cover-opt" style="aspect-ratio:1;border-radius:8px;overflow:hidden;cursor:pointer;border:3px solid '+(isSel?'var(--accent)':'transparent')+';position:relative"><img src="'+url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy">'+(isSel?'<div style="position:absolute;top:2px;right:2px;background:var(--accent);color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:.6em">✓</div>':'')+'</div>';
+}
+function showMoreCovers(){
+  var grid=$('coverGrid');if(!grid)return;
+  var next=_coverPhotos.slice(_coverShown,_coverShown+COVER_PAGE);
+  grid.insertAdjacentHTML('beforeend',next.map(coverItemHTML).join(''));
+  _coverShown+=next.length;
+  var w=$('coverMoreWrap');
+  if(w){
+    if(_coverShown<_coverPhotos.length){
+      w.innerHTML='<button class="btn btn-gray btn-sm" onclick="showMoreCovers()" style="margin-top:8px">Показать ещё фото ('+(_coverPhotos.length-_coverShown)+')</button>';
+    }else{w.innerHTML=''}
+  }
+}
+
 function selectCover(fname){
   $('em_cover').value=fname;
+  _coverSelected=fname;
   document.querySelectorAll('.cover-opt').forEach(el=>{
     var isSel=el.dataset.fname===fname;
     el.style.border='3px solid '+(isSel?'var(--accent)':'transparent');
