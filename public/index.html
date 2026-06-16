@@ -309,7 +309,8 @@ function renderPortfolio(cat){
   for(var p of items){
     var c=p.category||'electro';
     var coverUrl=p.cover_filename?(SUPA_URL+'/storage/v1/object/public/photo/'+p.cover_filename):null;
-    var thumb=coverUrl?'<img src="'+coverUrl+'" loading="lazy" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">':'<span class="g-thumb-l">'+CAT_SHORT[c]+'</span>';
+    var coverThumb=p.cover_filename?(SUPA_URL+'/storage/v1/object/public/photo/thumb_'+p.cover_filename):null;
+    var thumb=coverUrl?'<img src="'+coverThumb+'" loading="lazy" onerror="this.onerror=null;this.src=\''+coverUrl+'\'" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">':'<span class="g-thumb-l">'+CAT_SHORT[c]+'</span>';
     var meta='';
     if(p.address)meta+='<span>'+esc(p.address)+'</span>';
     if(p.completion_date)meta+='<span>'+fmtMonth(p.completion_date)+'</span>';
@@ -335,7 +336,7 @@ async function loadLiveProjects(){
         const{data:fp}=await sb.from('project_photos').select('filename').eq('project_id',p.id).order('created_at',{ascending:true}).limit(1);
         if(fp&&fp.length)avatarFile=fp[0].filename;
       }
-      var avatar=avatarFile?'<img class="pr-avatar" src="'+SUPA_URL+'/storage/v1/object/public/photo/'+avatarFile+'" loading="lazy">':'<div class="pr-avatar-ph">🏗️</div>';
+      var avatar=avatarFile?'<img class="pr-avatar" src="'+SUPA_URL+'/storage/v1/object/public/photo/thumb_'+avatarFile+'" loading="lazy" onerror="this.onerror=null;this.src=\''+SUPA_URL+'/storage/v1/object/public/photo/'+avatarFile+'\'">':'<div class="pr-avatar-ph">🏗️</div>';
       // Progress: manual override or auto from smeta
       var pct;
       if(p.manual_progress!==null&&p.manual_progress!==undefined){
@@ -379,12 +380,13 @@ async function openProj(id){
       h+='<div class="proj-modal-gallery">';
       for(var ph of photos){
         var url=SUPA_URL+'/storage/v1/object/public/photo/'+ph.filename;
+        var turl=SUPA_URL+'/storage/v1/object/public/photo/thumb_'+ph.filename;
         var ext=ph.filename.split('.').pop().toLowerCase();
         var isVid=['mp4','mov','avi','webm','mkv'].includes(ext);
         if(isVid){
-          h+='<div class="proj-modal-gallery-item"><video src="'+url+'" controls muted></video></div>';
+          h+='<div class="proj-modal-gallery-item"><video src="'+url+'" controls muted preload="none"></video></div>';
         }else{
-          h+='<div class="proj-modal-gallery-item" onclick="viewImg(\''+url+'\')"><img src="'+url+'" loading="lazy"></div>';
+          h+='<div class="proj-modal-gallery-item" onclick="viewImg(\''+url+'\')"><img src="'+turl+'" loading="lazy" onerror="this.onerror=null;this.src=\''+url+'\'"></div>';
         }
       }
       h+='</div>';

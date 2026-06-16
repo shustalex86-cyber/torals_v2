@@ -361,8 +361,9 @@ var _coverPhotos=[],_coverShown=0,_coverSelected='';
 const COVER_PAGE=24;
 function coverItemHTML(p){
   var url=SUPA_URL+'/storage/v1/object/public/photo/'+p.filename;
+  var turl=SUPA_URL+'/storage/v1/object/public/photo/thumb_'+p.filename;
   var isSel=p.filename===_coverSelected;
-  return '<div onclick="selectCover(\''+p.filename+'\')" data-fname="'+p.filename+'" class="cover-opt" style="aspect-ratio:1;border-radius:8px;overflow:hidden;cursor:pointer;border:3px solid '+(isSel?'var(--accent)':'transparent')+';position:relative"><img src="'+url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy">'+(isSel?'<div style="position:absolute;top:2px;right:2px;background:var(--accent);color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:.6em">✓</div>':'')+'</div>';
+  return '<div onclick="selectCover(\''+p.filename+'\')" data-fname="'+p.filename+'" class="cover-opt" style="aspect-ratio:1;border-radius:8px;overflow:hidden;cursor:pointer;border:3px solid '+(isSel?'var(--accent)':'transparent')+';position:relative"><img src="'+turl+'" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.onerror=null;this.src=\''+url+'\'">'+(isSel?'<div style="position:absolute;top:2px;right:2px;background:var(--accent);color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:.6em">✓</div>':'')+'</div>';
 }
 function showMoreCovers(){
   var grid=$('coverGrid');if(!grid)return;
@@ -447,7 +448,7 @@ async function deleteProject(){
   const{data:photos}=await sb.from('project_photos').select('filename').eq('project_id',CUR_PID);
   if(photos&&photos.length){
     var fnames=photos.map(p=>p.filename);
-    await sb.storage.from('photo').remove(fnames);
+    await sb.storage.from('photo').remove(fnames);await sb.storage.from('photo').remove(fnames.map(n=>'thumb_'+n));
   }
   // Delete project (cascade will remove photos, works, receipts)
   await sb.from('projects').delete().eq('id',CUR_PID);
@@ -544,14 +545,18 @@ async function uploadAll(){
   for(var f of pending){
     pt.textContent='Сжатие и загрузка '+(done+1)+' из '+total+'...';
     pf.style.width=Math.round(done/total*100)+'%';
-    // Compress image (1920px max, 82% quality)
+    // Full image (1920px, 82%)
     var originalSize=f.size;
     var compressed=await compressImage(f,1920,0.82);
     savedBytes+=originalSize-compressed.size;
-    var ext=compressed.name.split('.').pop()||'jpg';
-    var fname=Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.'+ext;
-    const{error}=await sb.storage.from('photo').upload(fname,compressed,{contentType:compressed.type});
+    // Thumbnail (400px, 70%)
+    var thumb=await compressImage(f,400,0.7);
+    var fname=Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.jpg';
+    var thumbName='thumb_'+fname;
+    const{error}=await sb.storage.from('photo').upload(fname,compressed,{contentType:'image/jpeg'});
     if(!error){
+      // Upload thumbnail (ignore errors - fallback to full image)
+      try{await sb.storage.from('photo').upload(thumbName,thumb,{contentType:'image/jpeg'})}catch(e){}
       await sb.from('project_photos').insert({project_id:CUR_PID,filename:fname,original_name:f.name,uploaded_by:USER.display_name});
       done++;
     }else{errors++;done++}
@@ -562,6 +567,14 @@ async function uploadAll(){
   setTimeout(()=>{pw.style.display='none';pf.style.width='0%'},4000);
   clearPending();loadGallery();
   toast('📸 Загружено: '+(done-errors)+' файлов'+savedMsg);
+}
+
+// Возвращает URL превью (если есть) с фолбэком на полное фото
+function thumbUrl(filename){
+  return SUPA_URL+'/storage/v1/object/public/photo/thumb_'+filename;
+}
+function fullUrl(filename){
+  return SUPA_URL+'/storage/v1/object/public/photo/'+filename;
 }
 
 var selectedPhotos=new Set();
@@ -579,7 +592,7 @@ async function loadGallery(){
   if(!_allPhotos.length){$('galleryArea').innerHTML='<div class="empty"><div class="empty-icon">📷</div>Фото пока нет. Перетащите файлы в зону выше.</div>';return}
   var h='<div class="gallery-title">📸 Загруженные фото <span style="color:var(--t3);font-weight:400;font-size:.8em">('+_allPhotos.length+')</span></div>';
   h+='<div class="select-bar" id="selectBar"><div style="display:flex;align-items:center;gap:12px"><button class="btn btn-gray btn-sm" onclick="selectAll()">☑ Выделить все</button><button class="btn btn-gray btn-sm" onclick="deselectAll()">Снять выделение</button><span style="color:var(--accent-l);font-size:.85em" id="selectedCount">0 выбрано</span></div><button class="btn btn-red btn-sm" onclick="deleteSelected()">🗑 Удалить выбранные</button></div>';
-  h+='<div style="margin-bottom:8px"><button class="btn btn-gray btn-sm" onclick="toggleSelectMode()" id="btnSelectMode">☑ Режим выделения</button></div>';
+  h+='<div style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-gray btn-sm" onclick="toggleSelectMode()" id="btnSelectMode">☑ Режим выделения</button><button class="btn btn-gray btn-sm" onclick="genThumbnails()" id="btnGenThumbs">🖼️ Ускорить старые фото</button></div>';
   h+='<div class="gallery-grid" id="galleryGrid"></div>';
   h+='<div id="loadMoreWrap" style="text-align:center;margin-top:16px"></div>';
   $('galleryArea').innerHTML=h;
@@ -588,9 +601,11 @@ async function loadGallery(){
 
 function photoItemHTML(p){
   var url=SUPA_URL+'/storage/v1/object/public/photo/'+p.filename;
+  var turl=SUPA_URL+'/storage/v1/object/public/photo/thumb_'+p.filename;
   var ext=p.filename.split('.').pop().toLowerCase();
   var isVid=['mp4','mov','avi','webm','mkv'].includes(ext);
-  var media=isVid?'<video src="'+url+'" style="width:100%;height:160px;object-fit:cover" muted preload="none"></video>':'<img src="'+url+'" loading="lazy">';
+  // Грузим превью; если его нет (старое фото) — onerror подставит полное
+  var media=isVid?'<video src="'+url+'" style="width:100%;height:160px;object-fit:cover" muted preload="none"></video>':'<img src="'+turl+'" loading="lazy" onerror="this.onerror=null;this.src=\''+url+'\'">';
   return '<div class="gallery-item" data-id="'+p.id+'" data-fname="'+p.filename+'" onclick="toggleSelect(this)"><div class="gallery-item-check" id="chk'+p.id+'"></div>'+media+'<div class="gallery-item-info"><span class="gallery-item-name" title="'+p.uploaded_by+'">'+p.uploaded_by+'</span><button class="gallery-item-del" onclick="event.stopPropagation();delPhoto('+p.id+',\''+p.filename+'\')" title="Удалить">🗑</button></div></div>';
 }
 
@@ -605,6 +620,38 @@ function showMorePhotos(){
   }else{
     wrap.innerHTML='';
   }
+}
+
+// Создаёт превью для уже загруженных фото (у которых их ещё нет)
+async function genThumbnails(){
+  if(!_allPhotos.length){toast('Нет фото');return}
+  var btn=$('btnGenThumbs');
+  btn.disabled=true;
+  var total=_allPhotos.length,done=0,created=0,skipped=0;
+  for(var p of _allPhotos){
+    btn.textContent='⏳ '+(done+1)+'/'+total;
+    var ext=p.filename.split('.').pop().toLowerCase();
+    if(['mp4','mov','avi','webm','mkv'].includes(ext)){done++;skipped++;continue}
+    // Проверяем — есть ли уже превью
+    try{
+      var head=await fetch(thumbUrl(p.filename),{method:'HEAD'});
+      if(head.ok){done++;skipped++;continue}
+    }catch(e){}
+    // Скачиваем полное, делаем превью, заливаем
+    try{
+      var r=await fetch(fullUrl(p.filename));
+      var blob=await r.blob();
+      var file=new File([blob],p.filename,{type:blob.type||'image/jpeg'});
+      var thumb=await compressImage(file,400,0.7);
+      await sb.storage.from('photo').upload('thumb_'+p.filename,thumb,{contentType:'image/jpeg',upsert:true});
+      created++;
+    }catch(e){}
+    done++;
+  }
+  btn.disabled=false;
+  btn.textContent='🖼️ Ускорить старые фото';
+  toast('✅ Превью создано: '+created+(skipped?' · уже было: '+skipped:''));
+  loadGallery();
 }
 
 var selectMode=false;
@@ -665,7 +712,7 @@ async function deleteSelected(){
   var total=items.length,done=0;
   for(var el of items){
     var id=parseInt(el.dataset.id),fname=el.dataset.fname;
-    await sb.storage.from('photo').remove([fname]);
+    await sb.storage.from('photo').remove([fname,'thumb_'+fname]);
     await sb.from('project_photos').delete().eq('id',id);
     done++;
   }
@@ -676,7 +723,7 @@ async function deleteSelected(){
 
 async function delPhoto(id,fname){
   if(!confirm('Удалить фото?'))return;
-  await sb.storage.from('photo').remove([fname]);
+  await sb.storage.from('photo').remove([fname,'thumb_'+fname]);
   await sb.from('project_photos').delete().eq('id',id);
   loadGallery();toast('🗑 Удалено');
 }
